@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 import can
 
 from diagnoser.tools.bus_load import BusLoadSimulator
-from diagnoser.uds.client import UdsClient, UdsError
+from diagnoser.uds.client import UdsClient
+from diagnoser.uds.errors import UdsError
 
 
 @dataclass

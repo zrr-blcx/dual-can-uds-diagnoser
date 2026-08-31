@@ -14,7 +14,9 @@ class FaultInjector:
         self.clients = clients
 
     def inject_dtc(self, node: str, dtc: int, status: int = 0x2A) -> bytes:
-        payload = struct.pack(">BHB", 0x01, dtc & 0xFFFFFF, status & 0xFF)
+        payload = struct.pack(
+            ">B3sB", 0x01, dtc.to_bytes(3, "big"), status & 0xFF
+        )
         return self.clients[node].write_data_by_identifier(FAULT_CONTROL_DID, payload)
 
     def simulate_comm_loss(self, node: str, seconds: float) -> bytes:

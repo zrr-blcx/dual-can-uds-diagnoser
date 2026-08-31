@@ -29,6 +29,7 @@ class BusLoadSimulator:
         self.dlc = dlc
         self.payload = payload if payload is not None else bytes(dlc)
         self.target_load = target_load
+        self.baudrate = baudrate
         self._period = frame_bits(dlc) / baudrate / target_load
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -74,5 +75,4 @@ class BusLoadSimulator:
             return 0.0
         with self._lock:
             sent = self._sent
-        return (sent * frame_bits(self.dlc)) / elapsed / 500000
-
+        return (sent * frame_bits(self.dlc)) / elapsed / self.baudrate

@@ -7,9 +7,8 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
-from diagnoser.config import NetworkConfig, default_network
+from diagnoser.config import NetworkConfig
 from diagnoser.dbc.generator import (
     CanMessage,
     CanNetwork,
@@ -25,7 +24,8 @@ from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
 from diagnoser.tools.stress import run_stress
 from diagnoser.transport import create_bus
 from diagnoser.transport.isotp import IsoTpTransport
-from diagnoser.uds.client import NegativeResponse, UdsClient, UdsError
+from diagnoser.uds.client import UdsClient
+from diagnoser.uds.errors import NegativeResponse, UdsError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "network.json"
@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Dual-node CAN + UDS diagnostic tool V1.0",
     )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="network JSON config")
-    parser.add_argument("--interface", help="python-can interface (virtual, slcan, ...)")
+    parser.add_argument("--interface", help="python-can interface (memory, slcan, ...)")
     parser.add_argument("--channel", help="CAN channel or serial device")
     parser.add_argument("--baudrate", type=int, help="CAN bitrate")
     parser.add_argument("--timeout", type=float, help="ISO-TP timeout in seconds")
@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_routine = sub.add_parser("routine", help="0x31 routine control")
     p_routine.add_argument("--node", default="ecu1")
-    p_routine.add_argument("--subfunction", type=lambda s: int(s, 0), default="0x01")
+    p_routine.add_argument("--subfunction", type=lambda s: int(s, 0), default=0x01)
     p_routine.add_argument("routine_id", type=lambda s: int(s, 0), help="routine id, e.g. 0x0203")
     p_routine.add_argument("--data", default="", help="optional hex data")
 
@@ -80,17 +80,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_stress = sub.add_parser("stress", help="run dual-node diagnostic stress test")
     p_stress.add_argument("--frames", type=int, default=1000, help="total diagnostic requests")
     p_stress.add_argument("--load", type=float, default=0.9, help="target bus load, e.g. 0.9")
-    p_stress.add_argument("--did", type=lambda s: int(s, 0), default="0xF190")
+    p_stress.add_argument("--did", type=lambda s: int(s, 0), default=0xF190)
     p_stress.add_argument("--report", help="optional markdown report output path")
 
     p_fault = sub.add_parser("fault", help="inject faults into a virtual or real ECU")
     p_fault.add_argument("--node", default="ecu1")
     p_fault.add_argument("type", choices=["dtc", "comm-loss", "bus-off", "nrc", "clear"])
-    p_fault.add_argument("--dtc", type=lambda s: int(s, 0), default="0x010203")
-    p_fault.add_argument("--status", type=lambda s: int(s, 0), default="0x2A")
+    p_fault.add_argument("--dtc", type=lambda s: int(s, 0), default=0x010203)
+    p_fault.add_argument("--status", type=lambda s: int(s, 0), default=0x2A)
     p_fault.add_argument("--seconds", type=float, default=2.0)
-    p_fault.add_argument("--service", type=lambda s: int(s, 0), default="0x22")
-    p_fault.add_argument("--nrc", type=lambda s: int(s, 0), default="0x78")
+    p_fault.add_argument("--service", type=lambda s: int(s, 0), default=0x22)
+    p_fault.add_argument("--nrc", type=lambda s: int(s, 0), default=0x78)
 
     return parser
 

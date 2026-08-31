@@ -1,5 +1,5 @@
 {
-  "interface": "virtual",
+  "interface": "memory",
   "channel": "dual-can-uds",
   "baudrate": 500000,
   "timeout": 2.0,

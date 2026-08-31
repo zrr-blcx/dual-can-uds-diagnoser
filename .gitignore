@@ -6,5 +6,33 @@ venv/
 *.egg-info/
 dist/
 build/
+*.log
+
+# IDE and build artifacts
+Debug/
+Release/
+.settings/
+.project
+.cproject
+*.launch
+*.uvguix.*
+*.uvoptx
+*.uvprojx.bak
+
+# Generated output
+outputs/
+*.dbc.bak
+generated_structs/
+
+# Local configuration and secrets
+.env
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # 本地英语学习计划，不进 GitHub
 /CET4-CET6学习计划.md
+# 本地资料，不进 GitHub
+/本地资料/
