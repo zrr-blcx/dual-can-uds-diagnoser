@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dual-can-uds-diagnoser"
+version = "1.0.0"
+description = "Dual-node CAN + UDS diagnostic toolchain for STM32F407/F103 validation"
+requires-python = ">=3.10"
+dependencies = [
+    "python-can>=4.3.0",
+    "udsoncan>=1.20.0",
+    "cantools>=39.4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

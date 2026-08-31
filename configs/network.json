@@ -1,0 +1,11 @@
+{
+  "interface": "virtual",
+  "channel": "dual-can-uds",
+  "baudrate": 500000,
+  "timeout": 2.0,
+  "padding": "0xCC",
+  "ecus": [
+    {"name": "ecu1", "request_id": "0x7E0", "response_id": "0x7E8"},
+    {"name": "ecu2", "request_id": "0x7E1", "response_id": "0x7E9"}
+  ]
+}
