@@ -54,7 +54,8 @@ class UdsClient:
         return self._exchange(
             build_routine_control(subfunction, routine_id, data),
             SID_ROUTINE_CONTROL,
-        )
+        )[1:]
 
     def tester_present(self) -> bytes:
         return self._exchange(bytes([SID_TESTER_PRESENT, 0x00]), SID_TESTER_PRESENT)
+

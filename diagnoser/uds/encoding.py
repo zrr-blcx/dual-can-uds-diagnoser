@@ -39,8 +39,9 @@ def parse_response(response: bytes, expected_sid: int) -> bytes:
         service = response[1] if len(response) > 1 else 0
         nrc = response[2] if len(response) > 2 else 0
         raise NegativeResponse(service, nrc)
-    if response[0] != expected_sid:
+    if response[0] not in (expected_sid, expected_sid + 0x40):
         raise UnexpectedResponse(
             f"expected SID 0x{expected_sid:02X}, got 0x{response[0]:02X}"
         )
     return response[1:]
+

@@ -21,6 +21,7 @@ class MemoryBus(can.BusABC):
         **kwargs: Any,
     ) -> None:
         self.node_id = node_id
+        self.channel = channel
         with MemoryBus._lock:
             routes = MemoryBus._channels.setdefault(channel, {})
             key: object = node_id if node_id is not None else object()
@@ -54,3 +55,6 @@ class MemoryBus(can.BusABC):
                     self.node_id is None and not isinstance(route_key, int)
                 ):
                     del routes[route_key]
+        super().shutdown()
+
+

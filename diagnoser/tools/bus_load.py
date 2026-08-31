@@ -46,6 +46,7 @@ class BusLoadSimulator:
         self._thread.start()
 
     def _run(self) -> None:
+        next_send = time.perf_counter()
         while not self._stop.is_set():
             self.bus.send(
                 can.Message(
@@ -56,7 +57,10 @@ class BusLoadSimulator:
             )
             with self._lock:
                 self._sent += 1
-            self._stop.wait(self._period)
+            next_send += self._period
+            while time.perf_counter() < next_send:
+                if self._stop.is_set():
+                    return
 
     def stop(self) -> None:
         self._stop.set()
@@ -71,3 +75,4 @@ class BusLoadSimulator:
         with self._lock:
             sent = self._sent
         return (sent * frame_bits(self.dlc)) / elapsed / 500000
+

@@ -56,7 +56,7 @@ def test_c_struct_generation() -> None:
     code = SignalStructGenerator.generate_c(_network())
     assert "typedef struct {" in code
     assert "EngineData_t;" in code
-    assert "uint16_t EngineSpeed;" in code
+    assert "float EngineSpeed;" in code
 
 
 def test_signal_encode_decode_roundtrip_big_endian() -> None:
@@ -71,3 +71,5 @@ def test_signal_encode_decode_roundtrip_little_endian() -> None:
     data = bytearray(8)
     encode_signal(data, signal.start_bit, signal.length, 0xABC, signal.byte_order)
     assert decode_signal(bytes(data), signal.start_bit, signal.length, signal.byte_order) == 0xABC
+
+

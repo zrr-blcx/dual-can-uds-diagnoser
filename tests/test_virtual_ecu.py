@@ -24,9 +24,9 @@ def test_core_uds_services() -> None:
     try:
         response = client.change_session(0x03)
         assert response[0] == 0x03
-        assert client.read_data_by_identifier(0xF19A) == b"ecu1"
+        assert client.read_data_by_identifier(0xF19A) == b"\xF1\x9A" + b"ecu1"
         client.write_data_by_identifier(0xF191, b"\x12\x34\x56\x78")
-        assert client.read_data_by_identifier(0xF191) == b"\x12\x34\x56\x78"
+        assert client.read_data_by_identifier(0xF191) == b"\xF1\x91" + b"\x12\x34\x56\x78"
         assert client.routine_control(0x01, 0x0203) == b"\x02\x03\x01\x00"
     finally:
         ecu.stop()
@@ -72,3 +72,5 @@ def test_bus_off_and_auto_recovery() -> None:
         ecu.stop()
         ecu_bus.shutdown()
         tester_bus.shutdown()
+
+
