@@ -8,5 +8,3 @@ dist/
 build/
 # 本地英语学习计划，不进 GitHub
 /CET4-CET6学习计划.md
-/.patch_probe
-/dup_probe.txt
