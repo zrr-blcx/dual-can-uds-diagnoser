@@ -8,7 +8,7 @@ PC Diagnostic Tool
 CLI layer        diagnoser.cli
 UDS layer        diagnoser.uds (0x10/0x22/0x2E/0x31, NRC)
 ISO-TP layer     diagnoser.transport.isotp
-CAN layer        python-can bus adapter
+CAN layer        python-can bus adapter + diagnoser.tools.can_health
 
 STM32 ECU (planned)
 ==================
@@ -56,3 +56,18 @@ STM32 HAL
 - Bus load simulator targets 90%+ with periodic background frames.
 - Fault injector covers DTC, communication loss, NRC injection, and Bus-Off.
 - Stress metrics distinguish physical CAN frame loss from UDS request timeouts.
+
+## CAN Health and Bus-Off Recovery
+
+- `CanHealthMonitor` models TEC/REC, error-active/error-passive/Bus-Off state,
+  classified CAN errors, recovery attempts, and reset requests.
+- Error-passive starts at 128; transmit errors reaching 256 enter Bus-Off.
+- Three consecutive recovery failures request a controller or system reset.
+- `WatchdogSupervisor` tracks named task deadlines as a testable policy for the
+  firmware IWDG/WWDG implementation.
+- VirtualEcu exposes a seven-byte health snapshot through DID `0xF192`.
+- `bus-off-test` injects repeated Bus-Off events and emits a Markdown report.
+
+The software monitor validates policy and integration only. The STM32 CAN
+controller still owns the ISO 11898 error counters and 128-recessive-bit
+recovery sequence.

@@ -24,7 +24,10 @@ class FaultInjector:
         return self.clients[node].write_data_by_identifier(FAULT_CONTROL_DID, payload)
 
     def trigger_bus_off(self, node: str, seconds: float) -> bytes:
-        payload = bytes([0x03, int(seconds) & 0xFF])
+        milliseconds = max(0, round(seconds * 1000))
+        if milliseconds > 0xFFFF:
+            raise ValueError("Bus-Off duration cannot exceed 65.535 seconds")
+        payload = bytes([0x03]) + milliseconds.to_bytes(2, "big")
         return self.clients[node].write_data_by_identifier(FAULT_CONTROL_DID, payload)
 
     def inject_nrc(self, node: str, service: int, nrc: int) -> bytes:

@@ -19,6 +19,7 @@ from diagnoser.dbc.generator import (
 from diagnoser.emu.memory_bus import MemoryBus
 from diagnoser.emu.virtual_ecu import VirtualEcu
 from diagnoser.tools.fault_injection import FaultInjector
+from diagnoser.tools.bus_off import render_bus_off_report, run_bus_off_test
 from diagnoser.tools.report import render_markdown
 from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
 from diagnoser.tools.stress import run_stress
@@ -91,6 +92,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_fault.add_argument("--seconds", type=float, default=2.0)
     p_fault.add_argument("--service", type=lambda s: int(s, 0), default=0x22)
     p_fault.add_argument("--nrc", type=lambda s: int(s, 0), default=0x78)
+
+    p_bus_off = sub.add_parser(
+        "bus-off-test",
+        help="inject repeated Bus-Off events into a virtual ECU and verify recovery",
+    )
+    p_bus_off.add_argument("--node", default="ecu1")
+    p_bus_off.add_argument("--cycles", type=int, default=3)
+    p_bus_off.add_argument("--seconds", type=float, default=0.2)
+    p_bus_off.add_argument("--recovery-timeout", type=float, default=3.0)
+    p_bus_off.add_argument("--report", help="optional markdown report output path")
 
     return parser
 
@@ -358,6 +369,30 @@ def cmd_fault(args: argparse.Namespace) -> int:
         cleanup()
 
 
+def cmd_bus_off_test(args: argparse.Namespace) -> int:
+    client, cleanup = _open_client(args, args.node)
+    injector = FaultInjector({args.node: client})
+    try:
+        result = run_bus_off_test(
+            client,
+            injector,
+            args.node,
+            cycles=args.cycles,
+            seconds=args.seconds,
+            recovery_timeout_s=args.recovery_timeout,
+        )
+        report = render_bus_off_report(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -372,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         "demo": cmd_demo,
         "stress": cmd_stress,
         "fault": cmd_fault,
+        "bus-off-test": cmd_bus_off_test,
     }
     handler = handlers.get(args.command)
     if handler is None:

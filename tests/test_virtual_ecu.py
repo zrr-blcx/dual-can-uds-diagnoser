@@ -3,7 +3,7 @@ import time
 import pytest
 
 from diagnoser.emu.memory_bus import MemoryBus
-from diagnoser.emu.virtual_ecu import VirtualEcu
+from diagnoser.emu.virtual_ecu import CAN_HEALTH_DID, VirtualEcu
 from diagnoser.transport.isotp import IsoTpTransport
 from diagnoser.uds.client import UdsClient
 from diagnoser.uds.errors import NegativeResponse
@@ -68,6 +68,27 @@ def test_bus_off_and_auto_recovery() -> None:
             client.tester_present()
         time.sleep(1.3)
         client.tester_present()
+    finally:
+        ecu.stop()
+        ecu_bus.shutdown()
+        tester_bus.shutdown()
+
+
+def test_bus_off_health_is_reported_after_recovery() -> None:
+    ecu, client, ecu_bus, tester_bus = _build_ecu_and_client("bus-off-health")
+    try:
+        payload = bytes([0x03]) + (50).to_bytes(2, "big")
+        client.write_data_by_identifier(0xF190, payload)
+        with pytest.raises(TimeoutError):
+            client.tester_present()
+
+        time.sleep(0.1)
+        client.tester_present()
+        health = client.read_data_by_identifier(CAN_HEALTH_DID)
+
+        assert health[2] == 0
+        assert health[5] == 1
+        assert health[6] == 1
     finally:
         ecu.stop()
         ecu_bus.shutdown()

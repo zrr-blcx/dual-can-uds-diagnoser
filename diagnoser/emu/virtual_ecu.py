@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import can
 
+from diagnoser.tools.can_health import CanBusState, CanHealthMonitor
 from diagnoser.transport.isotp import IsoTpTransport
 from diagnoser.uds.constants import (
     SID_DIAGNOSTIC_SESSION_CONTROL,
@@ -20,6 +21,7 @@ from diagnoser.uds.constants import (
 
 FAULT_CONTROL_DID = 0xF190
 DTC_STATUS_DID = 0xF191
+CAN_HEALTH_DID = 0xF192
 
 
 @dataclass
@@ -43,17 +45,23 @@ class VirtualEcu:
     ) -> None:
         self.name = name
         self.bus = bus
+        self.health = CanHealthMonitor()
         self.transport = IsoTpTransport(
             bus, txid=response_id, rxid=request_id, timeout=0.5
         )
         self.supported_sessions = supported_sessions
         self.session = 0x01
-        self.dids = dids or {
-            FAULT_CONTROL_DID: bytes([0x00, 0x00]),
-            DTC_STATUS_DID: bytes([0x00, 0x00, 0x00, 0x00]),
-            0xF19A: self.name.encode("ascii"),
-            0xF19B: b"V1.0",
-        }
+        if dids is None:
+            self.dids = {
+                FAULT_CONTROL_DID: bytes([0x00, 0x00]),
+                DTC_STATUS_DID: bytes([0x00, 0x00, 0x00, 0x00]),
+                CAN_HEALTH_DID: bytes(7),
+                0xF19A: self.name.encode("ascii"),
+                0xF19B: b"V1.0",
+            }
+        else:
+            self.dids = dict(dids)
+            self.dids.setdefault(CAN_HEALTH_DID, bytes(7))
         self.writable_dids = writable_dids or {
             FAULT_CONTROL_DID,
             DTC_STATUS_DID,
@@ -95,6 +103,7 @@ class VirtualEcu:
             return None
         if self.fault.bus_off_until:
             self.fault.bus_off_until = 0.0
+            self.health.mark_recovered()
         if not request:
             return self._negative(0x00, 0x10)
 
@@ -129,7 +138,12 @@ class VirtualEcu:
         did = int.from_bytes(request[1:3], "big")
         if did not in self.dids:
             return self._negative(SID_READ_DATA_BY_IDENTIFIER, 0x31)
-        return bytes([0x62]) + request[1:3] + self.dids[did]
+        value = (
+            self._health_payload()
+            if did == CAN_HEALTH_DID
+            else self.dids[did]
+        )
+        return bytes([0x62]) + request[1:3] + value
 
     def _write_did(self, request: bytes) -> bytes:
         if len(request) < 3:
@@ -164,13 +178,17 @@ class VirtualEcu:
             return
         mode = value[0]
         if mode == 0x00:
+            if self.health.state == CanBusState.BUS_OFF:
+                self.health.mark_recovered()
             self.fault = EcuFaultState()
         elif mode == 0x01 and len(value) >= 5:
             self.dids[DTC_STATUS_DID] = value[1:5]
         elif mode == 0x02 and len(value) >= 2:
             self.fault.comm_loss_until = time.monotonic() + value[1]
         elif mode == 0x03 and len(value) >= 2:
-            self.fault.bus_off_until = time.monotonic() + value[1]
+            duration_s = self._fault_duration(value)
+            self.fault.bus_off_until = time.monotonic() + duration_s
+            self.health.enter_bus_off()
         elif mode == 0x04 and len(value) >= 3:
             self.fault.nrc_for_service[value[1]] = value[2]
 
@@ -186,3 +204,29 @@ class VirtualEcu:
 
     def _negative(self, service: int, nrc: int) -> bytes:
         return bytes([SID_NEGATIVE_RESPONSE, service, nrc])
+
+    def _health_payload(self) -> bytes:
+        snapshot = self.health.snapshot()
+        state_code = {
+            CanBusState.ERROR_ACTIVE: 0,
+            CanBusState.ERROR_PASSIVE: 1,
+            CanBusState.BUS_OFF: 2,
+        }[snapshot.state]
+        error_total = min(sum(snapshot.error_counts.values()), 0xFF)
+        return bytes(
+            [
+                state_code,
+                min(snapshot.tec, 0xFF),
+                min(snapshot.rec, 0xFF),
+                min(snapshot.bus_off_events, 0xFF),
+                min(snapshot.recovery_successes, 0xFF),
+                min(snapshot.recovery_failures, 0xFF),
+                error_total,
+            ]
+        )
+
+    @staticmethod
+    def _fault_duration(value: bytes) -> float:
+        if len(value) >= 3:
+            return int.from_bytes(value[1:3], "big") / 1000.0
+        return float(value[1])

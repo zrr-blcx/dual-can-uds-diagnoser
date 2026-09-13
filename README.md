@@ -19,6 +19,7 @@
 - UDS 诊断客户端、NRC 处理与编码，支持 0x10/0x22/0x2E/0x31
 - ISO 15765-2 多帧分包/组包与流控
 - 虚拟 ECU 与内存总线仿真，无需硬件即可验证协议栈
+- CAN 错误状态、Bus-Off 恢复策略与 IWDG/WWDG 看门狗监督模型
 - DBC 文件生成与 C/Python 信号结构体自动生成
 - 总线负载模拟、压力测试、故障注入与报告工具
 - 双节点请求调度与编程会话互斥
@@ -57,6 +58,7 @@ py -3.14 -m diagnoser.cli read-did --node ecu1 0xF190
 py -3.14 -m diagnoser.cli write-did --node ecu1 0xF191 01020304
 py -3.14 -m diagnoser.cli routine --node ecu1 0x0203
 py -3.14 -m diagnoser.cli stress --frames 1000 --load 0.9
+py -3.14 -m diagnoser.cli bus-off-test --cycles 3 --seconds 0.2
 ```
 
 真实 CANable/slcan 适配器：

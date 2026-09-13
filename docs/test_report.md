@@ -64,6 +64,21 @@
 | Recovery time | Measured in ms | Target |
 | Recover 3 times consecutively | Stable | Target |
 
+## Virtual Bus-Off Validation
+
+Measured on 2026-09-13 with `python-can` MemoryBus and VirtualEcu:
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Inject Bus-Off for 50 ms | Node stops responding | PASS, 3/3 cycles |
+| Automatically restore communication | Node responds again | PASS, 3/3 cycles |
+| Recover 3 times consecutively | Stable | PASS |
+| Observed recovery interval | Report probe latency | 75.6 ms to 89.7 ms |
+
+The observed interval includes CLI polling latency and is not a hardware
+acceptance measurement. See `docs/bus_off_recovery_report.md`. Real relay and
+STM32 validation remains Target.
+
 ## Conclusion
 
 - Physical frame loss below 0.1% at normal load: Target.
