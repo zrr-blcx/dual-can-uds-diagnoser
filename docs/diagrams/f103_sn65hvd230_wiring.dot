@@ -1,0 +1,327 @@
+digraph f103_sn65hvd230_wiring {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.45",
+        ranksep="0.9",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="江科大 STM32F103 最小系统板（4 针 CAN 接口）与 SN65HVD230 接线图\nCAN1 500 kbps 台架验证（面包板短距离布线）"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_f103 {
+        label="江科大 STM32F103 最小系统板：SWD 四针与 CAN1 引脚分开";
+        color="#00695c";
+        style="rounded,filled";
+        fillcolor="#e0f2f1";
+
+        F103_PWR [
+            label="板载 3.3V / GND\n从电源排针取",
+            fillcolor="#ffffff"
+        ];
+        F103_SWD [
+            label="你提供的 4 针 SWD 下载口\n① 3.3V\n② GND\n③ PA13 / SWDIO\n④ PA14 / SWCLK\n只接 ST-Link，不接 SN65HVD230",
+            fillcolor="#bbdefb",
+            color="#1565c0",
+            penwidth=3
+        ];
+        F103_CAN [
+            label="两侧长排针上的 CAN1 信号：\n优先：PA12 / CAN1_TX、PA11 / CAN1_RX\n备用：PB9/CAN1_TX、PB8/CAN1_RX（CAN remap）",
+            fillcolor="#b2dfdb",
+            color="#00695c",
+            penwidth=3
+        ];
+        F103_WARN [
+            label="PA13/PA14 是 SWDIO/SWCLK，\n不是 CAN_TX/CAN_RX。\n把 SN65HVD230 接到这两个脚会破坏调试连接。\nCAN 必须使用两侧排针上的 PA11/PA12\n或 remap 后的 PB8/PB9。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+        F103_USB [
+            label="PA11/PA12 也是 STM32F103 原生 USB 的 DM/DP。\n如果板载 USB 使用原生 USB 数据线，\n不能同时把这些引脚用于 CAN。\n使用 PB8/PB9 remap 时，\n还要确认它们没有被 I2C1 等外设占用。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_stlink {
+        label="调试器：仅用于烧录和调试";
+        color="#1565c0";
+        style="rounded,dashed,filled";
+        fillcolor="#e3f2fd";
+
+        STLINK [
+            label="ST-Link\nSWDIO / SWCLK / GND / 3.3V\n与 F103 四针下载口相连",
+            shape=box3d,
+            fillcolor="#ffffff",
+            color="#1565c0",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_sn {
+        label="SN65HVD230 外部模块";
+        color="#2e7d32";
+        style="rounded,filled";
+        fillcolor="#e8f5e9";
+
+        SN_VCC [
+            label="VCC\n3.3V",
+            fillcolor="#ffffff"
+        ];
+        SN_GND [
+            label="GND",
+            fillcolor="#ffffff"
+        ];
+        SN_TXD [
+            label="TXD / D\n模块输入",
+            fillcolor="#c8e6c9"
+        ];
+        SN_RXD [
+            label="RXD / R\n模块输出",
+            fillcolor="#c8e6c9"
+        ];
+        SN_RS [
+            label="RS / STB / S\n高速模式控制",
+            fillcolor="#c8e6c9"
+        ];
+        SN_CANH [
+            label="CANH",
+            fillcolor="#d1c4e9"
+        ];
+        SN_CANL [
+            label="CANL",
+            fillcolor="#d1c4e9"
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="面包板 CAN 差分总线";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        BUS_H_L [
+            label="CANH 左端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_L [
+            label="CANL 左端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_H_R [
+            label="CANH 右端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_R [
+            label="CANL 右端",
+            fillcolor="#d1c4e9"
+        ];
+        TERM1 [
+            label="120Ω 终接电阻 #1\n单节点台架可先接一个\n只跨接在 CANH-CANL 之间\n0.25W，引线尽量短",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+
+        BUS_H_L -> BUS_H_R [
+            label="CANH 双绞线",
+            color="#6a1b9a",
+            penwidth=3
+        ];
+        BUS_L_L -> BUS_L_R [
+            label="CANL 双绞线",
+            color="#8e24aa",
+            penwidth=3
+        ];
+        TERM1 -> BUS_H_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM1 -> BUS_L_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+    }
+
+    subgraph cluster_node2 {
+        label="后续必须加入：第二个活动 CAN 节点";
+        color="#546e7a";
+        style="rounded,dashed,filled";
+        fillcolor="#eceff1";
+
+        NODE2 [
+            label="STM32F407 + SN65HVD230\n或 CANable\n提供 ACK、双向收发和抓包",
+            shape=box3d,
+            fillcolor="#ffffff"
+        ];
+        TERM2 [
+            label="120Ω 终接电阻 #2\n放在总线的另一物理端\n断电测量 CANH-CANL 约 60Ω",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3,
+            style="dashed,rounded,filled"
+        ];
+    }
+
+    subgraph cluster_rules {
+        label="CubeMX 与接线规则";
+        color="#455a64";
+        style="rounded,filled";
+        fillcolor="#fafafa";
+
+        NOTE_F103 [
+            label="F103：APB1=36 MHz\nPrescaler=4，BS1=15，BS2=2\n500 kbps，采样点 88.9%",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_POWER [
+            label="SN65HVD230 的 VCC 接 F103 的 3.3V。\n不要把裸露 SN65HVD230 芯片直接接 5V。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_RS [
+            label="RS / STB / S 接 GND，选择高速模式。\n不要悬空，否则可能待机或斜率受限。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_GND [
+            label="F103、SN65HVD230、第二节点和 CANable\n必须共地，否则 CAN 差分电平没有稳定参考。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_ACK [
+            label="单节点正常模式发送不会有 ACK。\n台架单节点测试可先用 CAN Loopback；\n正式验证必须接第二个活动节点。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+        NOTE_TERM [
+            label="终接电阻不是串在信号线上：\n两端各 120Ω，均跨接在 CANH 与 CANL 之间。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+    }
+
+    F103_PWR -> SN_VCC [
+        label="F103 ① 3.3V",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F103_PWR -> SN_GND [
+        label="F103 ② GND",
+        color="#424242",
+        penwidth=2
+    ];
+    F103_CAN -> SN_TXD [
+        label="PA12/CAN_TX -> TXD / D",
+        color="#00695c",
+        penwidth=2
+    ];
+    SN_RXD -> F103_CAN [
+        label="RXD / R -> PA11/CAN_RX",
+        color="#00695c",
+        penwidth=2
+    ];
+    SN_RS -> F103_PWR [
+        label="RS -> GND",
+        color="#ef6c00",
+        style=dashed,
+        penwidth=2,
+        constraint=false
+    ];
+
+    F103_SWD -> STLINK [
+        label="ST-Link SWD 调试",
+        color="#1565c0",
+        style=dashed,
+        penwidth=2,
+        constraint=false
+    ];
+
+    SN_CANH -> BUS_H_L [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN_CANL -> BUS_L_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+
+    BUS_H_R -> NODE2 [
+        label="CANH",
+        color="#6a1b9a",
+        style=dashed,
+        penwidth=2
+    ];
+    BUS_L_R -> NODE2 [
+        label="CANL",
+        color="#8e24aa",
+        style=dashed,
+        penwidth=2
+    ];
+    TERM2 -> BUS_H_R [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        style=dashed,
+        penwidth=3
+    ];
+    TERM2 -> BUS_L_R [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        style=dashed,
+        penwidth=3
+    ];
+
+    F103_WARN -> SN_RS [
+        label="接线前确认",
+        color="#ef6c00",
+        style=dotted,
+        constraint=false
+    ];
+    F103_USB -> F103_WARN [
+        style=invis
+    ];
+    NOTE_ACK -> NOTE_TERM [
+        style=invis
+    ];
+}

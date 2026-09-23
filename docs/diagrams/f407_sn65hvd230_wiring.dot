@@ -1,0 +1,284 @@
+digraph f407_sn65hvd230_wiring {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.45",
+        ranksep="0.9",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="STM32F407ZGT6 与 SN65HVD230 接线图\n500 kbps CAN1 台架验证（面包板短距离布线）"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_f407 {
+        label="STM32F407ZGT6（正点原子 Explorer）";
+        color="#1565c0";
+        style="rounded,filled";
+        fillcolor="#e3f2fd";
+
+        F407_PWR [
+            label="板载 3.3V 与 GND\n由 USB 或 ST-Link 供电",
+            fillcolor="#ffffff"
+        ];
+        F407_TX [
+            label="PA12\nCAN1_TX",
+            fillcolor="#bbdefb"
+        ];
+        F407_RX [
+            label="PA11\nCAN1_RX",
+            fillcolor="#bbdefb"
+        ];
+        F407_WARN [
+            label="先检查板载 CAN 收发器：\n如 PA11/PA12 已被占用，必须断开跳线、\n断开 0Ω 电阻或禁用板载收发器。\n不要与外部 SN65HVD230 同时接入。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_sn {
+        label="SN65HVD230 外部模块";
+        color="#2e7d32";
+        style="rounded,filled";
+        fillcolor="#e8f5e9";
+
+        SN_VCC [
+            label="VCC\n3.3V",
+            fillcolor="#ffffff"
+        ];
+        SN_GND [
+            label="GND",
+            fillcolor="#ffffff"
+        ];
+        SN_TXD [
+            label="TXD / D\n模块输入",
+            fillcolor="#c8e6c9"
+        ];
+        SN_RXD [
+            label="RXD / R\n模块输出",
+            fillcolor="#c8e6c9"
+        ];
+        SN_RS [
+            label="RS / STB / S\n高速模式控制",
+            fillcolor="#c8e6c9"
+        ];
+        SN_CANH [
+            label="CANH",
+            fillcolor="#d1c4e9"
+        ];
+        SN_CANL [
+            label="CANL",
+            fillcolor="#d1c4e9"
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="面包板 CAN 差分总线";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        BUS_H_L [
+            label="CANH 左端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_L [
+            label="CANL 左端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_H_R [
+            label="CANH 右端",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_R [
+            label="CANL 右端",
+            fillcolor="#d1c4e9"
+        ];
+        TERM1 [
+            label="120Ω 终接电阻 #1\n只跨接在 CANH-CANL 之间\n0.25W，引线尽量短",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+
+        BUS_H_L -> BUS_H_R [
+            label="CANH 双绞线",
+            color="#6a1b9a",
+            penwidth=3
+        ];
+        BUS_L_L -> BUS_L_R [
+            label="CANL 双绞线",
+            color="#8e24aa",
+            penwidth=3
+        ];
+        TERM1 -> BUS_H_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM1 -> BUS_L_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+    }
+
+    subgraph cluster_node2 {
+        label="后续必须加入：第二个活动 CAN 节点";
+        color="#546e7a";
+        style="rounded,dashed,filled";
+        fillcolor="#eceff1";
+
+        NODE2 [
+            label="STM32F103 + SN65HVD230\n或 CANable\n提供 ACK、双向收发和抓包",
+            shape=box3d,
+            fillcolor="#ffffff"
+        ];
+        TERM2 [
+            label="120Ω 终接电阻 #2\n放在总线的另一物理端\n断电测量 CANH-CANL 约 60Ω",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3,
+            style="dashed,rounded,filled"
+        ];
+    }
+
+    subgraph cluster_rules {
+        label="接线与验证规则";
+        color="#455a64";
+        style="rounded,filled";
+        fillcolor="#fafafa";
+
+        NOTE_POWER [
+            label="SN65HVD230 的 VCC 接 F407 的 3.3V。\n不要把裸露 SN65HVD230 芯片直接接 5V。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_RS [
+            label="RS / STB / S 接 GND，选择高速模式。\n不要悬空，否则可能待机或斜率受限。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_GND [
+            label="F407、SN65HVD230、第二节点和 CANable\n必须共地，否则 CAN 差分电平没有稳定参考。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_ACK [
+            label="单节点正常模式发送不会有 ACK。\n台架单节点测试可先用 CAN Loopback；\n正式验证必须接第二个活动节点。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+        NOTE_TERM [
+            label="终接电阻不是串在信号线上：\n两端各 120Ω，均跨接在 CANH 与 CANL 之间。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+    }
+
+    F407_PWR -> SN_VCC [
+        label="3.3V",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F407_PWR -> SN_GND [
+        label="GND",
+        color="#424242",
+        penwidth=2
+    ];
+    F407_TX -> SN_TXD [
+        label="PA12 -> TXD / D",
+        color="#1565c0",
+        penwidth=2
+    ];
+    SN_RXD -> F407_RX [
+        label="RXD / R -> PA11",
+        color="#1565c0",
+        penwidth=2
+    ];
+    SN_RS -> F407_PWR [
+        label="RS -> GND",
+        color="#ef6c00",
+        style=dashed,
+        penwidth=2,
+        constraint=false
+    ];
+
+    SN_CANH -> BUS_H_L [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN_CANL -> BUS_L_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+
+    BUS_H_R -> NODE2 [
+        label="CANH",
+        color="#6a1b9a",
+        style=dashed,
+        penwidth=2
+    ];
+    BUS_L_R -> NODE2 [
+        label="CANL",
+        color="#8e24aa",
+        style=dashed,
+        penwidth=2
+    ];
+    TERM2 -> BUS_H_R [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        style=dashed,
+        penwidth=3
+    ];
+    TERM2 -> BUS_L_R [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        style=dashed,
+        penwidth=3
+    ];
+
+    F407_WARN -> SN_RS [
+        label="接线前确认",
+        color="#ef6c00",
+        style=dotted,
+        constraint=false
+    ];
+    NOTE_ACK -> NOTE_TERM [
+        style=invis
+    ];
+}

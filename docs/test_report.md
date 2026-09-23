@@ -79,6 +79,59 @@ The observed interval includes CLI polling latency and is not a hardware
 acceptance measurement. See `docs/bus_off_recovery_report.md`. Real relay and
 STM32 validation remains Target.
 
+## Automated Regression
+
+| Date | Python | Command | Result |
+| --- | --- | --- | --- |
+| 2026-09-20 | 3.12.13 (`.venv`) | `python -m pytest` | `36 passed`, 1 cache-permission warning |
+
+The `py` launcher was unavailable in the current Windows shell, so the project
+virtual environment was used for the complete regression. The warning came from
+writing `.pytest_cache`; no test case failed or was skipped.
+
+## Firmware Build Validation
+
+| Date | Target | Toolchain | Artifact | Result |
+| --- | --- | --- | --- | --- |
+| 2026-09-20 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, text 10196 B |
+| 2026-09-20 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 8692 B |
+
+The F103 image was programmed, verified, and reset through ST-Link. The F407
+image was also programmed successfully after reconnecting its SWD target.
+An initial dual-node CAN exchange was observed. After the intermittent physical
+bus connection was corrected, repeated tests confirmed stable bidirectional
+traffic.
+
+## Week 1 CAN Baseline
+
+Measured on 2026-09-20 with both programmed nodes connected to the same
+500 kbps CAN bus. RAM counters were cleared, both MCUs were reset, and the
+counters were read back through ST-Link.
+
+| Node | First read TX/RX | Later read TX/RX | Result |
+| --- | --- | --- | --- |
+| F407 | 16 / 15 | 33 / 30, 54 / 58, 219 / 222 | PASS |
+| F103 | 16 / 17 | 33 / 30, 63 / 59, 224 / 221 | PASS |
+
+Both RX counters increased continuously across repeated reads, which confirms
+that frames were acknowledged and received in both directions. F407 reported
+`ESR=0`, and F103 reported no active protocol error flags. The common CAN
+driver, CubeIDE project metadata, IOC configuration, and filter-bank plan are
+complete.
+
+### Week 1 Final Repeat Test
+
+Three consecutive synchronized-reset cycles were run after all Week 1
+deliverables were closed.
+
+| Cycle | F407 TX/RX | F103 TX/RX | F407 ESR | F103 ESR | Result |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 6 / 6 | 6 / 7 | 0x00000000 | 0x00000000 | PASS |
+| 2 | 6 / 6 | 6 / 6 | 0x00000000 | 0x00000000 | PASS |
+| 3 | 6 / 6 | 6 / 6 | 0x00000000 | 0x00000000 | PASS |
+
+The Week 1 hardware and CAN baseline milestone is complete.
+
 ## Conclusion
 
 - Physical frame loss below 0.1% at normal load: Target.

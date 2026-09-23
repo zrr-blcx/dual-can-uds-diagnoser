@@ -19,6 +19,20 @@ Release/
 *.uvoptx
 *.uvprojx.bak
 
+# Keep generated CubeIDE project metadata for firmware sources
+!firmware/**/.project
+!firmware/**/.cproject
+!firmware/**/.settings/
+!firmware/**/.settings/**
+
+# Firmware build outputs
+firmware/**/Build/
+firmware/**/Debug/
+
+# Local CubeMX scratch projects, not part of the repository
+firmware/*-temp/
+firmware/ecu-f407/ecu-f407/
+
 # Generated output
 outputs/
 *.dbc.bak
@@ -36,3 +50,6 @@ Thumbs.db
 /CET4-CET6学习计划.md
 # 本地资料，不进 GitHub
 /本地资料/
+
+# 项目内 Codex 本地规则，不进 GitHub
+/AGENTS.md

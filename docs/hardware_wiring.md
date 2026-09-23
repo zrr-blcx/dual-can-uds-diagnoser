@@ -5,7 +5,7 @@
 | Item | Model / Spec | Qty |
 | --- | --- | --- |
 | STM32F407 board | Positive Atom Explorer F407ZGT6 | 1 |
-| STM32F103 board | Positive Atom Mini / Wildfire RCT6 | 1 |
+| STM32F103 board | Jiangkeda STM32F103C8T6 minimum board | 1 |
 | CAN transceiver | SN65HVD230 module | 2 |
 | USB-CAN | CANable 2.0 / Pro with slcan firmware | 1 |
 | Fault relay | 2-channel 5V opto-isolated | 1 |
@@ -19,7 +19,7 @@
 | MCU | CAN peripheral | TX | RX |
 | --- | --- | --- | --- |
 | STM32F407ZGT6 | CAN1 | PA12 | PA11 |
-| STM32F103RCT6 | CAN1 | PA12 | PA11 |
+| STM32F103C8T6 | CAN1 | PA12 | PA11 |
 
 ## SN65HVD230 Module
 
@@ -33,8 +33,11 @@
 | CANL | CAN bus low |
 | STB/RS | GND or leave at module default if enabled |
 
-Before wiring external transceivers, disable or bypass any onboard CAN
-transceiver on the boards. Two RXD drivers on the same MCU pin can conflict.
+The current F407 Explorer and Jiangkeda F103C8T6 boards do not include an
+onboard CAN transceiver. Their MCUs contain only the CAN controller, so the
+external SN65HVD230 modules are required for CANH/CANL. If a different board
+with an onboard transceiver is used later, disable or bypass that transceiver
+before connecting an external module.
 
 ## Bus Termination
 

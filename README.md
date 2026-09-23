@@ -10,7 +10,7 @@
 ## Status
 
 - Python diagnostic tool V1.0 scaffold: ready for development and tests.
-- STM32 firmware: planned with STM32CubeIDE + HAL.
+- STM32 firmware: F407/F103 Week 1 CAN 500 kbps baseline and deliverables complete.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
@@ -35,7 +35,7 @@ PC Diagnostic Tool
   diagnoser.dbc           DBC and signal struct generation
   diagnoser.emu           MemoryBus and VirtualEcu for simulation
 
-STM32 ECU (planned, CubeIDE + HAL)
+STM32 ECU (CubeIDE + HAL)
   App layer -> UDS service layer -> ISO-TP layer -> CAN driver -> HAL
 ```
 
@@ -83,7 +83,7 @@ python -m diagnoser.cli --help
 | `tests/` | pytest 单元测试 |
 | `configs/` | 网络与运行配置 |
 | `docs/` | 架构、接线、测试报告、Roadmap |
-| `firmware/` | STM32 CubeIDE 工程（规划中） |
+| `firmware/` | STM32F407/F103 HAL 工程与构建脚本 |
 | `开发日志/` | 每周开发日志 |
 
 ## Roadmap

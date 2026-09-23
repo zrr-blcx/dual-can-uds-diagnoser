@@ -1,0 +1,308 @@
+digraph breadboard_f407_f103_can_wiring {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.4",
+        ranksep="0.85",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="面包板 CAN 双节点接线布局（F407 + F103）\n逻辑侧接 MCU，CAN 侧只接 CANH/CANL + 两端 120Ω"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_node_a {
+        label="节点 A：F407 侧（板外到面包板）";
+        color="#1565c0";
+        style="rounded,filled";
+        fillcolor="#e3f2fd";
+
+        F407_MCU [
+            label="STM32F407ZGT6\n3.3V / GND\nPA12 / CAN1_TX\nPA11 / CAN1_RX",
+            shape=box3d,
+            fillcolor="#ffffff",
+            color="#1565c0"
+        ];
+        A_VCC [
+            label="面包板左侧 3.3V 节点\n只给 SN65HVD230 #1",
+            fillcolor="#c8e6c9"
+        ];
+        A_GND [
+            label="面包板左侧 GND 节点\n与右侧 GND 连通",
+            fillcolor="#cfd8dc"
+        ];
+        SN1 [
+            label="SN65HVD230 #1\nVCC  GND  TXD/D  RXD/R  RS",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        TERM1 [
+            label="120Ω #1\n跨接 CANH-CANL\n放在 F407 物理端",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+        A_H [
+            label="F407 侧 CANH",
+            fillcolor="#d1c4e9"
+        ];
+        A_L [
+            label="F407 侧 CANL",
+            fillcolor="#d1c4e9"
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="面包板中间：只走 CANH / CANL 双绞线";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        BUS_H [
+            label="CANH 双绞线\n不要接 3.3V 或 GND",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L [
+            label="CANL 双绞线\n不要接 3.3V 或 GND",
+            fillcolor="#d1c4e9"
+        ];
+        GND_BRIDGE [
+            label="公共 GND 桥接线\n必须连接两侧 GND",
+            fillcolor="#cfd8dc",
+            color="#455a64",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_node_b {
+        label="节点 B：F103 侧（板外到面包板）";
+        color="#00695c";
+        style="rounded,filled";
+        fillcolor="#e0f2f1";
+
+        F103_MCU [
+            label="STM32F103\n3.3V / GND\nPA12 / CAN1_TX\nPA11 / CAN1_RX",
+            shape=box3d,
+            fillcolor="#ffffff",
+            color="#00695c"
+        ];
+        B_VCC [
+            label="面包板右侧 3.3V 节点\n只给 SN65HVD230 #2\n不要与左侧 3.3V 直接并联",
+            fillcolor="#c8e6c9",
+            color="#2e7d32"
+        ];
+        B_GND [
+            label="面包板右侧 GND 节点\n与左侧 GND 连通",
+            fillcolor="#cfd8dc"
+        ];
+        SN2 [
+            label="SN65HVD230 #2\nVCC  GND  TXD/D  RXD/R  RS",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        TERM2 [
+            label="120Ω #2\n跨接 CANH-CANL\n放在 F103 物理端",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+        B_H [
+            label="F103 侧 CANH",
+            fillcolor="#d1c4e9"
+        ];
+        B_L [
+            label="F103 侧 CANL",
+            fillcolor="#d1c4e9"
+        ];
+    }
+
+    subgraph cluster_notes {
+        label="面包板接线要点";
+        color="#37474f";
+        style="rounded,filled";
+        fillcolor="#fafafa";
+
+        NOTE_ROWS [
+            label="面包板每一排 5 个孔是互通的；\n模块的 VCC、GND、TXD、RXD、RS\n各自占用不同排，不能把不同信号插在同一排。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_POWER [
+            label="如果 F407 和 F103 各自用 USB/ST-Link 供电，\n不要把两块板的 3.3V 输出直接并联。\n只把 GND 共起来，3.3V 分别给各自的 SN65HVD230。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_BUS [
+            label="CANH/CANL 不要走普通电源轨，\n用短的双绞线直接连接两个 SN65HVD230。\nCANH 对 CANH，CANL 对 CANL。",
+            shape=note,
+            fillcolor="#f3e5f5",
+            color="#6a1b9a",
+            penwidth=2
+        ];
+        NOTE_TERM [
+            label="每个模块旁边放一个 120Ω：\n一脚接 CANH，一脚接 CANL。\n不是串在信号线上，也不是 H/L 对 GND。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+        NOTE_SINGLE [
+            label="单节点台架：只放一个 120Ω，并使用 Loopback。\n双节点：两个 120Ω，分别放在两个物理端。",
+            shape=note,
+            fillcolor="#e8f5e9",
+            color="#2e7d32"
+        ];
+    }
+
+    F407_MCU -> A_VCC [
+        label="3.3V",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F407_MCU -> A_GND [
+        label="GND",
+        color="#424242",
+        penwidth=2
+    ];
+    F407_MCU -> SN1 [
+        label="PA12 -> TXD\nRXD -> PA11",
+        color="#1565c0",
+        penwidth=2
+    ];
+    A_VCC -> SN1 [
+        label="VCC",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    A_GND -> SN1 [
+        label="GND / RS",
+        color="#424242",
+        penwidth=2
+    ];
+    SN1 -> A_H [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN1 -> A_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+    TERM1 -> A_H [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        penwidth=3
+    ];
+    TERM1 -> A_L [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        penwidth=3
+    ];
+
+    F103_MCU -> B_VCC [
+        label="3.3V",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F103_MCU -> B_GND [
+        label="GND",
+        color="#424242",
+        penwidth=2
+    ];
+    F103_MCU -> SN2 [
+        label="PA12 -> TXD\nRXD -> PA11",
+        color="#00695c",
+        penwidth=2
+    ];
+    B_VCC -> SN2 [
+        label="VCC",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    B_GND -> SN2 [
+        label="GND / RS",
+        color="#424242",
+        penwidth=2
+    ];
+    SN2 -> B_H [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN2 -> B_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+    TERM2 -> B_H [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        penwidth=3
+    ];
+    TERM2 -> B_L [
+        dir=none,
+        label="跨接",
+        color="#c62828",
+        penwidth=3
+    ];
+
+    A_H -> BUS_H [
+        label="接总线",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    BUS_H -> B_H [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    A_L -> BUS_L [
+        label="接总线",
+        color="#8e24aa",
+        penwidth=3
+    ];
+    BUS_L -> B_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+    A_GND -> GND_BRIDGE [
+        label="GND",
+        color="#424242",
+        style=dashed,
+        penwidth=2
+    ];
+    GND_BRIDGE -> B_GND [
+        label="GND",
+        color="#424242",
+        style=dashed,
+        penwidth=2
+    ];
+}

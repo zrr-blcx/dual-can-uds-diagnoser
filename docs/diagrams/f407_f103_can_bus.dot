@@ -1,0 +1,324 @@
+digraph f407_f103_can_bus {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.45",
+        ranksep="0.95",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="STM32F407ZGT6 + STM32F103RCT6 双节点 CAN 接线图\nCAN1 500 kbps，两端各 120Ω，共地，双绞线互联"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_f407 {
+        label="节点 1：STM32F407ZGT6（ecu1）";
+        color="#1565c0";
+        style="rounded,filled";
+        fillcolor="#e3f2fd";
+
+        F407_PWR [
+            label="F407 3.3V / GND\nUSB 或 ST-Link 供电",
+            fillcolor="#ffffff"
+        ];
+        F407_TX [
+            label="PA12\nCAN1_TX",
+            fillcolor="#bbdefb"
+        ];
+        F407_RX [
+            label="PA11\nCAN1_RX",
+            fillcolor="#bbdefb"
+        ];
+        SN1 [
+            label="SN65HVD230 #1\nVCC=3.3V  GND  RS->GND\nTXD<-PA12  RXD->PA11",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        F407_DISABLE [
+            label="F407 板载 CAN 收发器必须先断开/禁用，\n避免与外部 SN65HVD230 同时驱动 PA11。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="CAN 总线：CANH / CANL 双绞线 + 公共 GND";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        BUS_H_L [
+            label="CANH 左端\n接 F407 侧",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_L [
+            label="CANL 左端\n接 F407 侧",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_H_R [
+            label="CANH 右端\n接 F103 侧",
+            fillcolor="#d1c4e9"
+        ];
+        BUS_L_R [
+            label="CANL 右端\n接 F103 侧",
+            fillcolor="#d1c4e9"
+        ];
+        GND_BUS [
+            label="公共 GND 线\n所有节点共地",
+            fillcolor="#cfd8dc"
+        ];
+        TERM1 [
+            label="120Ω #1\nF407 物理端\n跨接 CANH-CANL",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM2 [
+            label="120Ω #2\nF103 物理端\n跨接 CANH-CANL",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=3
+        ];
+
+        BUS_H_L -> BUS_H_R [
+            label="CANH（双绞线）",
+            color="#6a1b9a",
+            penwidth=3
+        ];
+        BUS_L_L -> BUS_L_R [
+            label="CANL（双绞线）",
+            color="#8e24aa",
+            penwidth=3
+        ];
+        TERM1 -> BUS_H_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM1 -> BUS_L_L [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM2 -> BUS_H_R [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+        TERM2 -> BUS_L_R [
+            dir=none,
+            label="跨接",
+            color="#c62828",
+            penwidth=3
+        ];
+    }
+
+    subgraph cluster_f103 {
+        label="节点 2：STM32F103RCT6（ecu2）";
+        color="#00695c";
+        style="rounded,filled";
+        fillcolor="#e0f2f1";
+
+        F103_PWR [
+            label="F103 3.3V / GND\nUSB 或 ST-Link 供电",
+            fillcolor="#ffffff"
+        ];
+        F103_TX [
+            label="PA12\nCAN1_TX",
+            fillcolor="#b2dfdb"
+        ];
+        F103_RX [
+            label="PA11\nCAN1_RX",
+            fillcolor="#b2dfdb"
+        ];
+        SN2 [
+            label="SN65HVD230 #2\nVCC=3.3V  GND  RS->GND\nTXD<-PA12  RXD->PA11",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        F103_DISABLE [
+            label="F103 板载 CAN 收发器/终接电阻必须先断开、\n移除跳线或拆掉 0Ω，避免双驱动和多余 120Ω。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_canable {
+        label="可选：CANable / PC 抓包节点";
+        color="#455a64";
+        style="rounded,dashed,filled";
+        fillcolor="#eceff1";
+
+        CANABLE [
+            label="CANable slcan\nCANH / CANL / GND\n500 kbps\n内部 120Ω 跳线断开",
+            shape=box3d,
+            fillcolor="#ffffff"
+        ];
+    }
+
+    subgraph cluster_notes {
+        label="CubeMX / 固件验收参数";
+        color="#37474f";
+        style="rounded,filled";
+        fillcolor="#fafafa";
+
+        NOTE_F407 [
+            label="F407：APB1=42 MHz\nPrescaler=6，BS1=11，BS2=2\n500 kbps，采样点 85.7%",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_F103 [
+            label="F103：APB1=36 MHz\nPrescaler=4，BS1=15，BS2=2\n500 kbps，采样点 88.9%",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+        NOTE_ACK [
+            label="两节点都在线时，发送帧才能收到 ACK。\n先用 F407 发 0x123 控制 F103 LED，\n再用 F103 发 0x123 反向验证。",
+            shape=note,
+            fillcolor="#e8f5e9",
+            color="#2e7d32"
+        ];
+        NOTE_TERM [
+            label="总线断电测 CANH-CANL：\n两端各 120Ω 时约 60Ω。\n不要只在一个节点并联两个 120Ω。",
+            shape=note,
+            fillcolor="#ffebee",
+            color="#c62828",
+            penwidth=2
+        ];
+        NOTE_GND [
+            label="CANH、CANL、GND 和 3.3V 都要按各自模块连接；\nF407、F103、SN65HVD230 和 CANable 必须共地。",
+            shape=note,
+            fillcolor="#fff8e1",
+            color="#f9a825"
+        ];
+    }
+
+    F407_PWR -> SN1 [
+        label="3.3V / GND",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F407_TX -> SN1 [
+        label="PA12 -> TXD",
+        color="#1565c0",
+        penwidth=2
+    ];
+    SN1 -> F407_RX [
+        label="RXD -> PA11",
+        color="#1565c0",
+        penwidth=2
+    ];
+    SN1 -> BUS_H_L [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN1 -> BUS_L_L [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+
+    F103_PWR -> SN2 [
+        label="3.3V / GND",
+        color="#2e7d32",
+        penwidth=2
+    ];
+    F103_TX -> SN2 [
+        label="PA12 -> TXD",
+        color="#00695c",
+        penwidth=2
+    ];
+    SN2 -> F103_RX [
+        label="RXD -> PA11",
+        color="#00695c",
+        penwidth=2
+    ];
+    SN2 -> BUS_H_R [
+        label="CANH",
+        color="#6a1b9a",
+        penwidth=3
+    ];
+    SN2 -> BUS_L_R [
+        label="CANL",
+        color="#8e24aa",
+        penwidth=3
+    ];
+
+    F407_PWR -> GND_BUS [
+        label="GND",
+        color="#424242",
+        style=dashed,
+        penwidth=2,
+        constraint=false
+    ];
+    F103_PWR -> GND_BUS [
+        label="GND",
+        color="#424242",
+        style=dashed,
+        penwidth=2,
+        constraint=false
+    ];
+
+    CANABLE -> BUS_H_R [
+        label="CANH",
+        color="#6a1b9a",
+        style=dashed,
+        penwidth=2
+    ];
+    CANABLE -> BUS_L_R [
+        label="CANL",
+        color="#8e24aa",
+        style=dashed,
+        penwidth=2
+    ];
+    CANABLE -> GND_BUS [
+        label="GND",
+        color="#424242",
+        style=dashed,
+        penwidth=2
+    ];
+
+    F407_DISABLE -> SN1 [
+        label="先确认",
+        color="#ef6c00",
+        style=dotted,
+        constraint=false
+    ];
+    F103_DISABLE -> SN2 [
+        label="先确认",
+        color="#ef6c00",
+        style=dotted,
+        constraint=false
+    ];
+}

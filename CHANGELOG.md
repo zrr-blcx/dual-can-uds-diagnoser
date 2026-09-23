@@ -10,3 +10,6 @@
 - Add CAN error-state monitoring, Bus-Off recovery policy, and watchdog supervision.
 - Add repeated virtual Bus-Off injection with health reporting and CLI tests.
 - Add project documentation, Roadmap, and CI configuration.
+- Add STM32F407/F103 HAL firmware projects with 500 kbps CAN1 baseline.
+- Add reproducible PowerShell ARM GCC build scripts for both firmware nodes.
+- Verify stable bidirectional `0x123` CAN frame exchange and ACK on real hardware.
