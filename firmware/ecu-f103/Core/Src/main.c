@@ -1,11 +1,13 @@
 #include "main.h"
 #include "can_driver.h"
+#include "uds_ecu.h"
 
 #define APP_CAN_ID               0x123U
 #define APP_CAN_TX_PERIOD_MS     500U
 
 CAN_HandleTypeDef hcan1;
 static CanDriver_t g_can;
+static UdsEcu_t g_uds;
 volatile uint32_t g_can_tx_count = 0U;
 volatile uint32_t g_can_rx_count = 0U;
 
@@ -31,11 +33,15 @@ int main(void)
     Error_Handler();
   }
 
+  UdsEcu_Init(&g_uds, UDS_ECU_F103);
+
   while (1)
   {
     static uint32_t last_tx_tick = 0U;
     static uint8_t tx_value = 0U;
     uint32_t now = HAL_GetTick();
+
+    UdsEcu_Tick(&g_uds, now);
 
     if ((now - last_tx_tick) >= APP_CAN_TX_PERIOD_MS)
     {

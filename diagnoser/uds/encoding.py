@@ -7,6 +7,7 @@ from diagnoser.uds.constants import (
     SID_NEGATIVE_RESPONSE,
     SID_READ_DATA_BY_IDENTIFIER,
     SID_ROUTINE_CONTROL,
+    SID_SECURITY_ACCESS,
     SID_WRITE_DATA_BY_IDENTIFIER,
 )
 from diagnoser.uds.errors import NegativeResponse, UnexpectedResponse
@@ -22,6 +23,10 @@ def build_read_data_by_identifier(did: int) -> bytes:
 
 def build_write_data_by_identifier(did: int, data: bytes) -> bytes:
     return bytes([SID_WRITE_DATA_BY_IDENTIFIER]) + did.to_bytes(2, "big") + data
+
+
+def build_security_access(subfunction: int, data: bytes = b"") -> bytes:
+    return bytes([SID_SECURITY_ACCESS, subfunction & 0xFF]) + data
 
 
 def build_routine_control(subfunction: int, routine_id: int, data: bytes = b"") -> bytes:

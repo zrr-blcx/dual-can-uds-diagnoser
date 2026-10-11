@@ -50,6 +50,10 @@ $commonFlags = @(
 $sources = @()
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_did_db.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_ecu.c')
 
 $halNames = @(
     'stm32f1xx_hal.c',

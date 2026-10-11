@@ -20,3 +20,31 @@ def test_cli_bus_off_test_smoke() -> None:
         )
         == 0
     )
+
+
+def test_cli_uds_week5_smoke() -> None:
+    assert main(["uds-week5", "--node", "ecu1"]) == 0
+
+
+def test_cli_security_smoke() -> None:
+    assert main(["security", "--node", "ecu1"]) == 0
+
+
+def test_cli_secure_write_smoke() -> None:
+    assert (
+        main(
+            [
+                "--timeout",
+                "1.0",
+                "write-did",
+                "--node",
+                "ecu1",
+                "--session",
+                "0x03",
+                "--unlock",
+                "0x0100",
+                "DEADBEEF",
+            ]
+        )
+        == 0
+    )

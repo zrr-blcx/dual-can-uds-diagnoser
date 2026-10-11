@@ -5,8 +5,9 @@ from __future__ import annotations
 import struct
 
 from diagnoser.uds.client import UdsClient
+from diagnoser.uds.dids import DID_FAULT_CONTROL
 
-FAULT_CONTROL_DID = 0xF190
+FAULT_CONTROL_DID = DID_FAULT_CONTROL
 
 
 class FaultInjector:

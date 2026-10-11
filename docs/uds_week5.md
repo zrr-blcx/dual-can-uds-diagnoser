@@ -1,0 +1,122 @@
+# 第 5 周 UDS 服务 v1.0（0x27 + 0x2E + 0x31）
+
+## 范围与状态
+
+本周在现有可移植 C UDS 核心上补齐安全访问、写 DID 和例行控制，并在
+F407/F103 两套工程中启用同一服务层与差异化 DID 数据库。Python 虚拟 ECU
+实现了同样的状态机，用于双节点无硬件联调。
+
+当前状态：
+
+- 服务层 v1.0：`0x10/0x22/0x27/0x2E/0x31/0x3E` 已完成主机验证。
+- F407 与 F103：已编译 `uds_server.c`、`uds_reference_routines.c`、
+  `uds_did_db.c`、`uds_ecu.c`，应用循环调用 `UdsEcu_Tick`。
+- 双节点联调：使用 MemoryBus + 两个 VirtualEcu 完成
+  `10 03 -> 27 01 -> 27 02 -> 2E -> 31` 全流程。
+- 未完成：真实 F407/F103 的 ISO-TP 收发路径、CANable 抓包和实机双节点
+  验收。因此 `docs/ROADMAP.md` 第 5 周状态保持 Target。
+
+## 0x27 安全访问
+
+会话要求为 Extended 或 Programming，其他会话返回 NRC `0x7E`。
+
+| 请求 | 条件 | 响应 |
+| --- | --- | --- |
+| `27 01` | 未解锁 | `67 01 <seed[4]>` |
+| `27 01` | 已解锁 | `67 01 00 00 00 00` |
+| `27 02 <key[4]>` | Key 正确 | `67 02` |
+| `27 02 <key[4]>` | Key 错误 | NRC `0x35` |
+| 连续 3 次 Key 错误 | - | NRC `0x36`，启动 10 s 延时 |
+| 延时期内再次访问 | - | NRC `0x37` |
+| `27 02` 未先请求 Seed | - | NRC `0x24` |
+
+默认 Seed 源为 32 位 xorshift，Key 变换为：
+
+```text
+key = mix(seed XOR salt)
+salt = 0x50324341
+```
+
+固定测试向量：
+
+```text
+seed = 0x87985AA5
+key  = 0xE174F5DA
+```
+
+该变换只是项目联调用占位实现，量产时必须替换为 OEM 定义的 Seed/Key 算法和
+每 ECU 独立密钥。切换到 Default Session、S3 超时或重新进入其他会话时，
+安全状态自动锁定。
+
+## 0x2E 写 DID
+
+写 DID 的检查顺序：
+
+1. 请求长度：不足 SID + DID 返回 NRC `0x13`。
+2. DID 是否存在且可写：否则 NRC `0x31`。
+3. 当前会话是否允许写：否则 NRC `0x7E`。
+4. 是否需要解锁：未解锁返回 NRC `0x33`。
+5. 是否要求特定会话：不满足返回 NRC `0x22`。
+6. 数据是否超过 DID 容量：超过返回 NRC `0x31`。
+
+本项目把“当前会话不允许写”统一映射为 NRC `0x7E`，以便和第五周用例表
+保持一致；量产实现可以按 OEM 规范改成 `0x7F`。
+
+| DID | 内容 | F407 默认值 | F103 默认值 | 写会话 | 额外条件 |
+| --- | --- | --- | --- | --- | --- |
+| `0xF190` | VIN | `P2F407TESTVIN0001` | `P2F103TESTVIN0001` | Extended/Programming | 需解锁，仅 Programming 可写 |
+| `0xF193` | 硬件版本 | `F407-HW-REV-A` | `F103-HW-REV-A` | - | 只读 |
+| `0x0100` | 自定义数据 | `00 01` | `00 01` | Extended/Programming | 需解锁，最多 16 字节 |
+| `0xF191` | DTC 状态 | `00 00 00 00` | `00 00 00 00` | Extended/Programming | 需解锁，4 字节 |
+| `0xF19A` | ECU 名称 | `ecu1` | `ecu2` | - | 只读 |
+| `0xF19B` | 软件版本 | `V1.0` | `V1.0` | - | 只读 |
+
+写操作先写入 RAM 缓冲区，再由 `UdsServer_Process` 更新读取长度。实机接入
+Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调。
+
+## 0x31 例行控制
+
+子功能支持：
+
+- `01` Start
+- `02` Stop
+- `03` RequestResults
+
+例程表：
+
+| Routine ID | 名称 | 会话 | 解锁要求 | 行为 |
+| --- | --- | --- | --- | --- |
+| `0x0203` | 自检 | Extended/Programming | 否 | Start 后进入 Running；首次 RequestResults 返回 NRC `0x78`，下一次返回完成结果 |
+| `0xFF00` | 擦除 | Extended/Programming | 是 | 当前为可移植模拟实现，首次 RequestResults 返回 NRC `0x78`，下一次返回完成结果 |
+
+处理规则：
+
+- Running 状态下重复 Start：NRC `0x22`。
+- 非 Running 状态下 Stop：NRC `0x24`。
+- Start 之前 RequestResults：NRC `0x24`。
+- 未定义的 Routine ID：NRC `0x31`。
+- 未支持子功能：NRC `0x12`。
+- 会话不允许：NRC `0x7E`。
+- 未解锁且例程要求安全访问：NRC `0x33`。
+
+例程通过 `UdsRoutineHandler_t` 回调实现。当前参考实现位于
+`firmware/common/uds_reference_routines.c`，只维护 Running/Complete 状态，
+不对 Flash 做真实擦写；真实擦除逻辑应在应用层替换该回调。
+
+## 主机验证
+
+```powershell
+.venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m diagnoser.cli uds-week5 --node ecu1
+```
+
+`uds-week5` 覆盖：
+
+```text
+10 03 -> 27 01 -> 27 02 -> 2E 01 00 -> 22 01 00
+      -> 31 01 02 03 -> 31 03 02 03
+      -> 31 01 FF 00 -> 31 03 FF 00
+```
+
+未完成项保留在第五周目标中：真实 ISO-TP 固件路径、CANable 双节点实测、
+真实 Flash 擦除和实机 NRC 时序记录。

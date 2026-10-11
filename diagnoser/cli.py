@@ -23,10 +23,14 @@ from diagnoser.tools.bus_off import render_bus_off_report, run_bus_off_test
 from diagnoser.tools.report import render_markdown
 from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
 from diagnoser.tools.stress import run_stress
+from diagnoser.tools.uds_smoke import render_uds_smoke, run_uds_smoke
+from diagnoser.tools.uds_week5 import render_uds_week5, run_uds_week5
 from diagnoser.transport import create_bus
 from diagnoser.transport.isotp import IsoTpTransport
 from diagnoser.uds.client import UdsClient
+from diagnoser.uds.dids import DID_DTC_STATUS, DID_ECU_NAME
 from diagnoser.uds.errors import NegativeResponse, UdsError
+from diagnoser.uds.security import DEFAULT_SECURITY_SALT, seed_to_key
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "network.json"
@@ -56,12 +60,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_write = sub.add_parser("write-did", help="0x2E write data by identifier")
     p_write.add_argument("--node", default="ecu1")
+    p_write.add_argument(
+        "--session", type=lambda s: int(s, 0), help="optional session switch first"
+    )
+    p_write.add_argument(
+        "--unlock", action="store_true", help="run 0x27 seed/key before writing"
+    )
     p_write.add_argument("did", type=lambda s: int(s, 0), help="DID, e.g. 0xF191")
     p_write.add_argument("data", help="hex bytes, e.g. 010203")
 
     p_routine = sub.add_parser("routine", help="0x31 routine control")
     p_routine.add_argument("--node", default="ecu1")
     p_routine.add_argument("--subfunction", type=lambda s: int(s, 0), default=0x01)
+    p_routine.add_argument(
+        "--session", type=lambda s: int(s, 0), help="optional session switch first"
+    )
+    p_routine.add_argument(
+        "--unlock", action="store_true", help="run 0x27 seed/key before the routine"
+    )
     p_routine.add_argument("routine_id", type=lambda s: int(s, 0), help="routine id, e.g. 0x0203")
     p_routine.add_argument("--data", default="", help="optional hex data")
 
@@ -102,6 +118,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_bus_off.add_argument("--seconds", type=float, default=0.2)
     p_bus_off.add_argument("--recovery-timeout", type=float, default=3.0)
     p_bus_off.add_argument("--report", help="optional markdown report output path")
+
+    p_uds_smoke = sub.add_parser(
+        "uds-smoke",
+        help="run the Week 4 single-node 0x10/0x22 smoke workflow",
+    )
+    p_uds_smoke.add_argument("--node", default="ecu1")
+    p_uds_smoke.add_argument("--report", help="optional markdown report output path")
+
+    p_security = sub.add_parser("security", help="run the 0x27 seed/key exchange")
+    p_security.add_argument("--node", default="ecu1")
+    p_security.add_argument("--level", type=lambda s: int(s, 0), default=0x01)
+
+    p_uds_week5 = sub.add_parser(
+        "uds-week5",
+        help="run the Week 5 0x27/0x2E/0x31 workflow",
+    )
+    p_uds_week5.add_argument("--node", default="ecu1")
+    p_uds_week5.add_argument("--report", help="optional markdown report output path")
 
     return parser
 
@@ -194,6 +228,10 @@ def cmd_read_did(args: argparse.Namespace) -> int:
 def cmd_write_did(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
+        if args.session is not None:
+            _print_response("session control", client.change_session(args.session))
+        if args.unlock:
+            _print_response("security unlock", client.unlock())
         response = client.write_data_by_identifier(args.did, _hex_bytes(args.data))
         _print_response(f"write DID 0x{args.did:04X}", response)
         return 0
@@ -204,6 +242,10 @@ def cmd_write_did(args: argparse.Namespace) -> int:
 def cmd_routine(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
+        if args.session is not None:
+            _print_response("session control", client.change_session(args.session))
+        if args.unlock:
+            _print_response("security unlock", client.unlock())
         response = client.routine_control(
             args.subfunction, args.routine_id, _hex_bytes(args.data)
         )
@@ -284,11 +326,16 @@ def cmd_demo(args: argparse.Namespace) -> int:
             scheduler.enter_session(node, 0x03)
             response = scheduler.run(node, lambda: client.change_session(0x03))
             _print_response(f"{node} session", response)
-            response = scheduler.run(node, lambda: client.read_data_by_identifier(0xF19A))
+            response = scheduler.run(node, lambda: client.read_data_by_identifier(DID_ECU_NAME))
             _print_response(f"{node} ECU name", response)
+            response = scheduler.run(node, client.unlock)
+            _print_response(f"{node} security unlock", response)
             response = scheduler.run(
                 node,
-                lambda: client.write_data_by_identifier(0xF191, bytes([0x12, 0x34, 0x56, 0x78])),
+                lambda: client.write_data_by_identifier(
+                    DID_DTC_STATUS,
+                    bytes([0x12, 0x34, 0x56, 0x78]),
+                ),
             )
             _print_response(f"{node} write DTC status", response)
             response = scheduler.run(
@@ -340,7 +387,7 @@ def cmd_fault(args: argparse.Namespace) -> int:
         if args.type == "dtc":
             response = injector.inject_dtc(args.node, args.dtc, args.status)
             _print_response("DTC injected", response)
-            _print_response("DTC status", client.read_data_by_identifier(0xF191))
+            _print_response("DTC status", client.read_data_by_identifier(DID_DTC_STATUS))
         elif args.type == "comm-loss":
             response = injector.simulate_comm_loss(args.node, args.seconds)
             _print_response("comm loss armed", response)
@@ -359,7 +406,7 @@ def cmd_fault(args: argparse.Namespace) -> int:
             response = injector.inject_nrc(args.node, args.service, args.nrc)
             _print_response("NRC injection armed", response)
             try:
-                client.read_data_by_identifier(0xF19A)
+                client.read_data_by_identifier(DID_ECU_NAME)
             except NegativeResponse as exc:
                 print(f"negative response observed: {exc}")
         else:
@@ -393,6 +440,55 @@ def cmd_bus_off_test(args: argparse.Namespace) -> int:
         cleanup()
 
 
+def cmd_uds_smoke(args: argparse.Namespace) -> int:
+    client, cleanup = _open_client(args, args.node)
+    try:
+        result = run_uds_smoke(client, args.node)
+        report = render_uds_smoke(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
+def cmd_security(args: argparse.Namespace) -> int:
+    client, cleanup = _open_client(args, args.node)
+    try:
+        client.change_session(0x03)
+        seed = client.request_seed(args.level)
+        _print_response("seed", seed)
+        if seed == bytes(4):
+            print("ECU already unlocked")
+            return 0
+        key = seed_to_key(int.from_bytes(seed, "big"), DEFAULT_SECURITY_SALT)
+        response = client.send_key(key.to_bytes(4, "big"), args.level)
+        _print_response("send key", response)
+        return 0
+    finally:
+        cleanup()
+
+
+def cmd_uds_week5(args: argparse.Namespace) -> int:
+    client, cleanup = _open_client(args, args.node)
+    try:
+        result = run_uds_week5(client, args.node)
+        report = render_uds_week5(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -408,6 +504,9 @@ def main(argv: list[str] | None = None) -> int:
         "stress": cmd_stress,
         "fault": cmd_fault,
         "bus-off-test": cmd_bus_off_test,
+        "uds-smoke": cmd_uds_smoke,
+        "security": cmd_security,
+        "uds-week5": cmd_uds_week5,
     }
     handler = handlers.get(args.command)
     if handler is None:

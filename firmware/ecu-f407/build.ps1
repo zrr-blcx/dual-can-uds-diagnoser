@@ -53,6 +53,10 @@ $sources = @()
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Src') -Filter '*.c' -File
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_did_db.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_ecu.c')
 $objectFiles = @()
 
 foreach ($source in $sources | Sort-Object FullName) {

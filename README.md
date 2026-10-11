@@ -11,12 +11,16 @@
 
 - Python diagnostic tool V1.0 scaffold: ready for development and tests.
 - STM32 firmware: F407/F103 Week 1 CAN 500 kbps baseline and deliverables complete.
+- Week 4 portable UDS core: `0x10/0x22/0x3E`, DID database, and S3 timeout
+  implemented and host-tested.
+- Week 5 UDS service v1.0: `0x27/0x2E/0x31`, security state machine, write
+  rules, routine control, NRC coverage, and dual-node virtual flow.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
 
 - 双节点 CAN 仲裁与时序同步验证
-- UDS 诊断客户端、NRC 处理与编码，支持 0x10/0x22/0x2E/0x31
+- UDS 诊断客户端、NRC 处理与编码，支持 0x10/0x22/0x27/0x2E/0x31/0x3E
 - ISO 15765-2 多帧分包/组包与流控
 - 虚拟 ECU 与内存总线仿真，无需硬件即可验证协议栈
 - CAN 错误状态、Bus-Off 恢复策略与 IWDG/WWDG 看门狗监督模型
@@ -55,10 +59,13 @@ py -3.14 -m pip install -e ".[dev]" -i https://pypi.tuna.tsinghua.edu.cn/simple
 py -3.14 -m diagnoser.cli demo
 py -3.14 -m diagnoser.cli session --node ecu1 0x03
 py -3.14 -m diagnoser.cli read-did --node ecu1 0xF190
-py -3.14 -m diagnoser.cli write-did --node ecu1 0xF191 01020304
-py -3.14 -m diagnoser.cli routine --node ecu1 0x0203
+py -3.14 -m diagnoser.cli security --node ecu1
+py -3.14 -m diagnoser.cli write-did --node ecu1 --session 0x03 --unlock 0xF191 01020304
+py -3.14 -m diagnoser.cli routine --node ecu1 --session 0x03 --unlock 0x0203
 py -3.14 -m diagnoser.cli stress --frames 1000 --load 0.9
 py -3.14 -m diagnoser.cli bus-off-test --cycles 3 --seconds 0.2
+py -3.14 -m diagnoser.cli uds-smoke --node ecu1
+py -3.14 -m diagnoser.cli uds-week5 --node ecu1
 ```
 
 真实 CANable/slcan 适配器：
@@ -72,7 +79,7 @@ py -3.14 -m diagnoser.cli --interface slcan --channel COMx read-did --node ecu1 
 ```bash
 pip install -e ".[dev]"
 pytest
-python -m diagnoser.cli --help
+python -m diagnoser.cli uds-week5 --node ecu1
 ```
 
 ## 目录结构

@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "can_driver.h"
+#include "uds_ecu.h"
 
 /* USER CODE END Includes */
 
@@ -49,6 +50,7 @@ volatile uint32_t g_can_tx_count = 0U;
 volatile uint32_t g_can_rx_count = 0U;
 
 /* USER CODE BEGIN PV */
+static UdsEcu_t g_uds;
 
 /* USER CODE END PV */
 
@@ -108,6 +110,8 @@ int main(void)
     Error_Handler();
   }
 
+  UdsEcu_Init(&g_uds, UDS_ECU_F407);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -117,6 +121,8 @@ int main(void)
     static uint32_t last_tx_tick = 0U;
     static uint8_t tx_value = 0U;
     uint32_t now = HAL_GetTick();
+
+    UdsEcu_Tick(&g_uds, now);
 
     if ((now - last_tx_tick) >= APP_CAN_TX_PERIOD_MS)
     {

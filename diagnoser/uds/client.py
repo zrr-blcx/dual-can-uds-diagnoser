@@ -4,19 +4,24 @@ from __future__ import annotations
 
 from diagnoser.transport.isotp import IsoTpTransport
 from diagnoser.uds.constants import (
+    SECURITY_REQUEST_SEED,
+    SECURITY_SEND_KEY,
     SID_DIAGNOSTIC_SESSION_CONTROL,
     SID_READ_DATA_BY_IDENTIFIER,
     SID_ROUTINE_CONTROL,
+    SID_SECURITY_ACCESS,
     SID_TESTER_PRESENT,
     SID_WRITE_DATA_BY_IDENTIFIER,
 )
 from diagnoser.uds.encoding import (
     build_read_data_by_identifier,
     build_routine_control,
+    build_security_access,
     build_session_control,
     build_write_data_by_identifier,
     parse_response,
 )
+from diagnoser.uds.security import DEFAULT_SECURITY_SALT, seed_to_key
 
 
 class UdsClient:
@@ -47,6 +52,30 @@ class UdsClient:
         return self._exchange(
             build_write_data_by_identifier(did, data), SID_WRITE_DATA_BY_IDENTIFIER
         )
+
+    def security_access(self, subfunction: int, data: bytes = b"") -> bytes:
+        return self._exchange(
+            build_security_access(subfunction, data), SID_SECURITY_ACCESS
+        )
+
+    def request_seed(self, level: int = 0x01) -> bytes:
+        """Request a seed and return only the seed bytes."""
+
+        response = self.security_access(level)
+        return response[1:5]
+
+    def send_key(self, key: bytes, level: int = 0x01) -> bytes:
+        if len(key) != 4:
+            raise ValueError("security key must be four bytes")
+        return self.security_access(level + 1, key)
+
+    def unlock(self, salt: int = DEFAULT_SECURITY_SALT) -> bytes:
+        """Run the 0x27 seed/key exchange and return the final response."""
+
+        seed = int.from_bytes(self.request_seed(), "big")
+        if seed == 0:
+            return bytes([0x02])
+        return self.send_key(seed_to_key(seed, salt).to_bytes(4, "big"))
 
     def routine_control(
         self, subfunction: int, routine_id: int, data: bytes = b""

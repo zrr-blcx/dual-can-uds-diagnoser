@@ -6,14 +6,14 @@
 PC Diagnostic Tool
 ==================
 CLI layer        diagnoser.cli
-UDS layer        diagnoser.uds (0x10/0x22/0x2E/0x31, NRC)
+UDS layer        diagnoser.uds (0x10/0x22/0x27/0x2E/0x31/0x3E, NRC)
 ISO-TP layer     diagnoser.transport.isotp
 CAN layer        python-can bus adapter + diagnoser.tools.can_health
 
-STM32 ECU (planned)
+STM32 ECU
 ==================
 Application layer
-UDS service layer
+UDS service layer      firmware/common/uds_server.c (Week 5 service v1.0)
 ISO 15765-2 TP layer
 CAN driver layer
 STM32 HAL
@@ -44,10 +44,31 @@ STM32 HAL
 | --- | --- | --- |
 | 0x10 | Diagnostic session control | Default/Extended/Programming |
 | 0x22 | Read data by identifier | DID table, single or multi-frame |
-| 0x2E | Write data by identifier | Requires security access |
-| 0x27 | Security access | Seed/Key before 0x2E |
-| 0x31 | Routine control | Start/Stop/RequestResults |
+| 0x2E | Write data by identifier | Session/security checks and DID capacity |
+| 0x27 | Security access | Seed/Key, attempts, delay, session lock |
+| 0x31 | Routine control | Start/Stop/RequestResults, `0x78` pending |
 | 0x3E | Tester present | Keep session alive |
+
+### DID Database
+
+| DID | Contents | Notes |
+| --- | --- | --- |
+| 0x0100 | Custom data | Application-defined |
+| 0xF190 | VIN | 17-character identification |
+| 0xF191 | DTC status | Virtual test value |
+| 0xF192 | CAN health | Seven-byte dynamic snapshot |
+| 0xF193 | Hardware version | ECU-specific |
+| 0xF19A | ECU name | ECU-specific |
+| 0xF19B | Software version | ECU-specific |
+| 0xF1A0 | Fault control | VirtualBus injection hook only |
+
+The portable UDS core in `firmware/common/uds_server.c` implements request
+dispatch, `0x10`, `0x22`, `0x27`, `0x2E`, `0x31`, `0x3E`, S3 timeout, DID
+lookup, security state, routine state, and negative responses.
+`firmware/common/uds_did_db.c` provides the F407/F103 DID differences, and
+`firmware/common/uds_ecu.c` wires the DID database and reference routines into
+both applications. The layer is host-tested and compiled for both STM32
+targets. Hardware integration still depends on the ISO-TP layer.
 
 ## Scheduling and Fault Injection
 
