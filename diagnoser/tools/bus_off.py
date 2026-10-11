@@ -55,9 +55,11 @@ def run_bus_off_test(
 
     probe_timeout_s = max(0.02, min(0.2, max(seconds / 2, 0.02)))
     original_timeout = client.timeout
+    original_retries = client.retries
     results: list[BusOffCycleResult] = []
     try:
         client.timeout = probe_timeout_s
+        client.retries = 0
         for cycle in range(1, cycles + 1):
             injector.trigger_bus_off(node, seconds)
             started = clock()
@@ -85,6 +87,7 @@ def run_bus_off_test(
                 break
     finally:
         client.timeout = original_timeout
+        client.retries = original_retries
 
     health: bytes | None = None
     if results and results[-1].recovered:

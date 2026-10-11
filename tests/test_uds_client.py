@@ -16,6 +16,31 @@ class FakeTransport:
         return self.response
 
 
+class ScriptedTransport:
+    """Return queued responses or raise queued exceptions."""
+
+    def __init__(
+        self,
+        responses: list[bytes | Exception],
+        *,
+        txid: int = 0x7E0,
+        rxid: int = 0x7E8,
+    ) -> None:
+        self.responses = list(responses)
+        self.sent: list[bytes] = []
+        self.txid = txid
+        self.rxid = rxid
+
+    def send(self, payload: bytes) -> None:
+        self.sent.append(bytes(payload))
+
+    def receive(self, timeout: float | None = None) -> bytes:
+        item = self.responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
 def test_change_session_request() -> None:
     transport = FakeTransport(b"\x50\x03\x00\x32\x00\x00")
     client = UdsClient(transport)
@@ -62,3 +87,73 @@ def test_unexpected_sid_raises() -> None:
     client = UdsClient(transport)
     with pytest.raises(UnexpectedResponse):
         client.change_session(0x03)
+
+
+def test_exchange_records_timing_and_can_ids() -> None:
+    transport = ScriptedTransport([b"\x50\x03\x00\x32\x01\xF4"])
+    client = UdsClient(transport, timeout=0.5, retries=0)
+    client.change_session(0x03)
+
+    info = client.last_exchange
+    assert info is not None
+    assert info.tx_id == 0x7E0
+    assert info.rx_id == 0x7E8
+    assert info.request == b"\x10\x03"
+    assert info.response == b"\x50\x03\x00\x32\x01\xF4"
+    assert info.elapsed_ms >= 0.0
+    assert info.negative is False
+    assert info.nrc is None
+
+
+def test_response_pending_is_consumed_without_resend() -> None:
+    transport = ScriptedTransport([b"\x7F\x31\x78", b"\x71\x03\x02\x03\x00"])
+    client = UdsClient(transport, timeout=0.5, p2_star_ms=2000, retries=0)
+    response = client.routine_control(0x03, 0x0203)
+
+    assert response == b"\x02\x03\x00"
+    assert transport.sent == [b"\x31\x03\x02\x03"]
+    info = client.last_exchange
+    assert info is not None
+    assert info.pending_responses == 1
+
+
+def test_response_pending_disabled_raises() -> None:
+    transport = ScriptedTransport([b"\x7F\x31\x78"])
+    client = UdsClient(transport, timeout=0.5, handle_response_pending=False)
+    with pytest.raises(NegativeResponse) as exc_info:
+        client.routine_control(0x03, 0x0203)
+
+    assert exc_info.value.nrc == 0x78
+    info = exc_info.value.exchange
+    assert info is not None
+    assert info.pending_responses == 0
+
+
+def test_timeout_is_retried_then_succeeds() -> None:
+    transport = ScriptedTransport([TimeoutError("no response"), b"\x62\xF1\x90\x00"])
+    client = UdsClient(transport, timeout=0.5, retries=1)
+    response = client.read_data_by_identifier(0xF190)
+
+    assert response == b"\xF1\x90\x00"
+    assert len(transport.sent) == 2
+    info = client.last_exchange
+    assert info is not None
+    assert info.retries == 1
+
+
+def test_timeout_raises_after_retries_exhausted() -> None:
+    transport = ScriptedTransport([TimeoutError("no response"), TimeoutError("no response")])
+    client = UdsClient(transport, timeout=0.5, retries=1)
+    with pytest.raises(TimeoutError):
+        client.read_data_by_identifier(0xF190)
+
+    assert len(transport.sent) == 2
+
+
+def test_invalid_timing_configuration_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        UdsClient(ScriptedTransport([]), p2_ms=0)
+    with pytest.raises(ValueError):
+        UdsClient(ScriptedTransport([]), p2_star_ms=0)
+    with pytest.raises(ValueError):
+        UdsClient(ScriptedTransport([]), retries=-1)

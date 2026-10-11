@@ -15,6 +15,8 @@
   implemented and host-tested.
 - Week 5 UDS service v1.0: `0x27/0x2E/0x31`, security state machine, write
   rules, routine control, NRC coverage, and dual-node virtual flow.
+- Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` wait, timeout
+  retries, timestamped/JSON output, CANable config, and udsoncan interop.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
@@ -27,6 +29,8 @@
 - DBC 文件生成与 C/Python 信号结构体自动生成
 - 总线负载模拟、压力测试、故障注入与报告工具
 - 双节点请求调度与编程会话互斥
+- 诊断仪 Alpha：P2/P2* 时序、`0x78` 响应挂起等待、超时重试、时间戳与
+  JSON Lines 输出、udsoncan 互操作适配
 
 ## 架构
 
@@ -66,13 +70,18 @@ py -3.14 -m diagnoser.cli stress --frames 1000 --load 0.9
 py -3.14 -m diagnoser.cli bus-off-test --cycles 3 --seconds 0.2
 py -3.14 -m diagnoser.cli uds-smoke --node ecu1
 py -3.14 -m diagnoser.cli uds-week5 --node ecu1
+py -3.14 -m diagnoser.cli --json read-did --node ecu1 0xF190
+py -3.14 -m diagnoser.cli --retries 2 --p2-star 5000 read-did --node ecu1 0xF190
 ```
 
 真实 CANable/slcan 适配器：
 
 ```powershell
-py -3.14 -m diagnoser.cli --interface slcan --channel COMx read-did --node ecu1 0xF190
+py -3.14 -m diagnoser.cli --config configs/canable.example.json --channel COMx read-did --node ecu1 0xF190
 ```
+
+诊断仪 Alpha 说明、命令列表与输出格式见
+[docs/diagnoser_v1_alpha.md](docs/diagnoser_v1_alpha.md)。
 
 通用开发环境：
 

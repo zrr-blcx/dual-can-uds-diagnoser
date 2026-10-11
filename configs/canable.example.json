@@ -1,0 +1,14 @@
+{
+  "interface": "slcan",
+  "channel": "COMx",
+  "baudrate": 500000,
+  "timeout": 2.0,
+  "padding": "0xCC",
+  "p2_ms": 50,
+  "p2_star_ms": 5000,
+  "retries": 1,
+  "ecus": [
+    {"name": "ecu1", "request_id": "0x7E0", "response_id": "0x7E8"},
+    {"name": "ecu2", "request_id": "0x7E1", "response_id": "0x7E9"}
+  ]
+}

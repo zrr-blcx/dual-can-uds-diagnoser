@@ -28,3 +28,10 @@
   `10 03 -> 27 01 -> 27 02 -> 2E -> 31` workflow.
 - Add the `uds-week5` and `security` CLI commands and secure-write/routine
   convenience flags.
+- Add Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` response-pending
+  wait, timeout retries, and per-exchange timing metadata.
+- Add timestamped text output and JSON Lines output with NRC names.
+- Add `configs/canable.example.json` and `--p2/--p2-star/--retries` options.
+- Add a `udsoncan` connection adapter and interoperability tests.
+- Keep fault-injection and stress measurements on `retries=0` so retries do not
+  hide offline windows or distort loss metrics.

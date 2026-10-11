@@ -14,7 +14,7 @@
 | `0x22` | 条件不满足 | Extended + 已解锁后写 `0xF190` | `7F 2E 22` | C / Python | Host PASS, HW Target |
 | `0x31` | DID 或 Routine 超出范围 | `22 FF FF`、`31 01 12 34` | `7F 22 31`、`7F 31 31` | C / Python | Host PASS, HW Target |
 | `0x33` | 未解锁写受保护 DID | Extended 下 `2E 01 00 ...` | `7F 2E 33` | C / Python / 双节点虚拟流程 | Host PASS, HW Target |
-| `0x78` | 例程仍在运行 | `31 03 02 03` 首次请求 | `7F 31 78` | C / Python / 双节点虚拟流程 | Host PASS, HW Target |
+| `0x78` | 例程仍在运行 | `31 03 02 03`（运行中） | 先 `7F 31 78`，随后 `71 03 ...` | C `RESPONSE_PENDING` / Python pending 测试 / 双节点虚拟流程 | Host PASS, HW Target |
 | `0x7E` | 当前会话不支持该子功能 | Default 下 `2E 01 00 ...` | `7F 2E 7E` | C / Python / 双节点虚拟流程 | Host PASS, HW Target |
 
 ## 安全访问补充 NRC

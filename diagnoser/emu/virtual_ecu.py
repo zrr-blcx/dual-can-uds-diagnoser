@@ -142,9 +142,12 @@ class VirtualEcu:
         supported_sessions: tuple[int, ...] = (0x01, 0x02, 0x03),
         s3_timeout_s: float = 5.0,
         security_salt: int = DEFAULT_SECURITY_SALT,
+        pending_delay_s: float = 0.05,
     ) -> None:
         if s3_timeout_s <= 0:
             raise ValueError("s3_timeout_s must be positive")
+        if pending_delay_s < 0:
+            raise ValueError("pending_delay_s must not be negative")
 
         supported_sessions = tuple(supported_sessions)
         self.name = name
@@ -166,12 +169,14 @@ class VirtualEcu:
         self.writable_dids = self._coerce_write_rules(writable_dids)
         self.routines = dict(routines) if routines is not None else default_routines()
         self.security_salt = security_salt & 0xFFFFFFFF
+        self.pending_delay_s = float(pending_delay_s)
         self._seed_generator = SeedGenerator()
         self._pending_seed: int | None = None
         self._security_unlocked = False
         self._security_attempts = 0
         self._security_delay_until = 0.0
         self.fault = EcuFaultState()
+        self._deferred: list[tuple[float, bytes]] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -209,14 +214,21 @@ class VirtualEcu:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
+            self._flush_deferred()
             self._expire_session(time.monotonic())
             try:
-                request = self.transport.receive(timeout=0.1)
+                request = self.transport.receive(timeout=0.05)
             except TimeoutError:
                 continue
             response = self._handle(request)
             if response is not None:
                 self.transport.send(response)
+
+    def _flush_deferred(self) -> None:
+        now = time.monotonic()
+        while self._deferred and self._deferred[0][0] <= now:
+            _, response = self._deferred.pop(0)
+            self.transport.send(response)
 
     def _handle(self, request: bytes) -> bytes | None:
         now = time.monotonic()
@@ -414,6 +426,13 @@ class VirtualEcu:
                 return self._negative(SID_ROUTINE_CONTROL, 0x24)
             state, payload = routine.request_results()
             if state == "running":
+                routine.state = "complete"
+                final = (
+                    bytes([0x71, ROUTINE_CONTROL_REQUEST_RESULTS])
+                    + request[2:4]
+                    + routine.result
+                )
+                self._deferred.append((time.monotonic() + self.pending_delay_s, final))
                 return self._negative(SID_ROUTINE_CONTROL, 0x78)
             response = (
                 bytes([0x71, ROUTINE_CONTROL_REQUEST_RESULTS])

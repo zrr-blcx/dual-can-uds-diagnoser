@@ -11,6 +11,7 @@ class NegativeResponse(UdsError):
     def __init__(self, service: int, nrc: int) -> None:
         self.service = service
         self.nrc = nrc
+        self.exchange: object | None = None
         super().__init__(
             f"NRC 0x{nrc:02X} ({nrc_name(nrc)}) for service 0x{service:02X}"
         )

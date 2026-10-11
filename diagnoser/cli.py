@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -18,8 +19,9 @@ from diagnoser.dbc.generator import (
 )
 from diagnoser.emu.memory_bus import MemoryBus
 from diagnoser.emu.virtual_ecu import VirtualEcu
-from diagnoser.tools.fault_injection import FaultInjector
 from diagnoser.tools.bus_off import render_bus_off_report, run_bus_off_test
+from diagnoser.tools.console import exchange_to_dict, format_exchange
+from diagnoser.tools.fault_injection import FaultInjector
 from diagnoser.tools.report import render_markdown
 from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
 from diagnoser.tools.stress import run_stress
@@ -47,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--baudrate", type=int, help="CAN bitrate")
     parser.add_argument("--timeout", type=float, help="ISO-TP timeout in seconds")
     parser.add_argument("--padding", type=lambda s: int(s, 0), help="padding byte")
+    parser.add_argument("--p2", type=float, help="P2server timeout in ms (default 50)")
+    parser.add_argument(
+        "--p2-star", dest="p2_star", type=float, help="P2*server timeout in ms (default 5000)"
+    )
+    parser.add_argument("--retries", type=int, help="response timeout retries (default 1)")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print each exchange as one JSON object",
+    )
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -92,7 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_structs.add_argument("--language", choices=["python", "c"], default="python")
     p_structs.add_argument("--output", default=str(PROJECT_ROOT / "outputs" / "generated_structs.py"))
 
-    p_demo = sub.add_parser("demo", help="run the software virtual dual-node demo")
+    sub.add_parser("demo", help="run the software virtual dual-node demo")
 
     p_stress = sub.add_parser("stress", help="run dual-node diagnostic stress test")
     p_stress.add_argument("--frames", type=int, default=1000, help="total diagnostic requests")
@@ -152,6 +164,12 @@ def _network(args: argparse.Namespace) -> NetworkConfig:
         config.timeout = args.timeout
     if args.padding is not None:
         config.padding = args.padding
+    if args.p2 is not None:
+        config.p2_ms = args.p2
+    if args.p2_star is not None:
+        config.p2_star_ms = args.p2_star
+    if args.retries is not None:
+        config.retries = args.retries
     return config
 
 
@@ -160,6 +178,16 @@ def _hex_bytes(value: str) -> bytes:
     if len(value) % 2:
         raise ValueError("hex data must contain an even number of digits")
     return bytes.fromhex(value)
+
+
+def _make_client(config: NetworkConfig, transport: IsoTpTransport) -> UdsClient:
+    return UdsClient(
+        transport,
+        timeout=config.timeout,
+        p2_ms=config.p2_ms,
+        p2_star_ms=config.p2_star_ms,
+        retries=config.retries,
+    )
 
 
 def _open_client(
@@ -181,7 +209,7 @@ def _open_client(
             timeout=config.timeout,
             padding=config.padding,
         )
-        client = UdsClient(transport, timeout=config.timeout)
+        client = _make_client(config, transport)
 
         def cleanup() -> None:
             virtual_ecu.stop()
@@ -198,18 +226,25 @@ def _open_client(
         timeout=config.timeout,
         padding=config.padding,
     )
-    return UdsClient(transport, timeout=config.timeout), bus.shutdown
+    return _make_client(config, transport), bus.shutdown
 
 
-def _print_response(title: str, response: bytes) -> None:
-    print(f"{title}: {response.hex(' ').upper()}")
+def _emit(args: argparse.Namespace, title: str, client: UdsClient) -> None:
+    info = client.last_exchange
+    if info is None:
+        print(f"{title}: (no exchange recorded)")
+        return
+    if args.json:
+        print(json.dumps(exchange_to_dict(info, title), ensure_ascii=False))
+    else:
+        print(f"{title}: {format_exchange(info)}")
 
 
 def cmd_session(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
-        response = client.change_session(args.session)
-        _print_response("session control", response)
+        client.change_session(args.session)
+        _emit(args, "session control", client)
         return 0
     finally:
         cleanup()
@@ -218,8 +253,8 @@ def cmd_session(args: argparse.Namespace) -> int:
 def cmd_read_did(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
-        response = client.read_data_by_identifier(args.did)
-        _print_response(f"read DID 0x{args.did:04X}", response)
+        client.read_data_by_identifier(args.did)
+        _emit(args, f"read DID 0x{args.did:04X}", client)
         return 0
     finally:
         cleanup()
@@ -229,11 +264,13 @@ def cmd_write_did(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
         if args.session is not None:
-            _print_response("session control", client.change_session(args.session))
+            client.change_session(args.session)
+            _emit(args, "session control", client)
         if args.unlock:
-            _print_response("security unlock", client.unlock())
-        response = client.write_data_by_identifier(args.did, _hex_bytes(args.data))
-        _print_response(f"write DID 0x{args.did:04X}", response)
+            client.unlock()
+            _emit(args, "security unlock", client)
+        client.write_data_by_identifier(args.did, _hex_bytes(args.data))
+        _emit(args, f"write DID 0x{args.did:04X}", client)
         return 0
     finally:
         cleanup()
@@ -243,13 +280,13 @@ def cmd_routine(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
         if args.session is not None:
-            _print_response("session control", client.change_session(args.session))
+            client.change_session(args.session)
+            _emit(args, "session control", client)
         if args.unlock:
-            _print_response("security unlock", client.unlock())
-        response = client.routine_control(
-            args.subfunction, args.routine_id, _hex_bytes(args.data)
-        )
-        _print_response(f"routine 0x{args.routine_id:04X}", response)
+            client.unlock()
+            _emit(args, "security unlock", client)
+        client.routine_control(args.subfunction, args.routine_id, _hex_bytes(args.data))
+        _emit(args, f"routine 0x{args.routine_id:04X}", client)
         return 0
     finally:
         cleanup()
@@ -258,8 +295,8 @@ def cmd_routine(args: argparse.Namespace) -> int:
 def cmd_raw(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
-        response = client.send_raw(_hex_bytes(args.data))
-        _print_response("raw response", response)
+        client.send_raw(_hex_bytes(args.data))
+        _emit(args, "raw response", client)
         return 0
     finally:
         cleanup()
@@ -324,24 +361,22 @@ def cmd_demo(args: argparse.Namespace) -> int:
             clients[ecu.name] = _open_client(args, ecu.name)
         for node, (client, _) in clients.items():
             scheduler.enter_session(node, 0x03)
-            response = scheduler.run(node, lambda: client.change_session(0x03))
-            _print_response(f"{node} session", response)
-            response = scheduler.run(node, lambda: client.read_data_by_identifier(DID_ECU_NAME))
-            _print_response(f"{node} ECU name", response)
-            response = scheduler.run(node, client.unlock)
-            _print_response(f"{node} security unlock", response)
-            response = scheduler.run(
+            scheduler.run(node, lambda: client.change_session(0x03))
+            _emit(args, f"{node} session", client)
+            scheduler.run(node, lambda: client.read_data_by_identifier(DID_ECU_NAME))
+            _emit(args, f"{node} ECU name", client)
+            scheduler.run(node, client.unlock)
+            _emit(args, f"{node} security unlock", client)
+            scheduler.run(
                 node,
                 lambda: client.write_data_by_identifier(
                     DID_DTC_STATUS,
                     bytes([0x12, 0x34, 0x56, 0x78]),
                 ),
             )
-            _print_response(f"{node} write DTC status", response)
-            response = scheduler.run(
-                node, lambda: client.routine_control(0x01, 0x0203)
-            )
-            _print_response(f"{node} self test", response)
+            _emit(args, f"{node} write DTC status", client)
+            scheduler.run(node, lambda: client.routine_control(0x01, 0x0203))
+            _emit(args, f"{node} self test", client)
         try:
             clients["ecu1"][0].read_data_by_identifier(0xFFFF)
         except NegativeResponse as exc:
@@ -385,32 +420,36 @@ def cmd_fault(args: argparse.Namespace) -> int:
     injector = FaultInjector({args.node: client})
     try:
         if args.type == "dtc":
-            response = injector.inject_dtc(args.node, args.dtc, args.status)
-            _print_response("DTC injected", response)
-            _print_response("DTC status", client.read_data_by_identifier(DID_DTC_STATUS))
+            injector.inject_dtc(args.node, args.dtc, args.status)
+            _emit(args, "DTC injected", client)
+            client.read_data_by_identifier(DID_DTC_STATUS)
+            _emit(args, "DTC status", client)
         elif args.type == "comm-loss":
-            response = injector.simulate_comm_loss(args.node, args.seconds)
-            _print_response("comm loss armed", response)
+            injector.simulate_comm_loss(args.node, args.seconds)
+            _emit(args, "comm loss armed", client)
             try:
                 client.tester_present()
             except TimeoutError:
                 print(f"{args.node} is offline as expected")
             time.sleep(args.seconds + 0.3)
-            _print_response("recovery check", client.tester_present())
+            client.tester_present()
+            _emit(args, "recovery check", client)
         elif args.type == "bus-off":
-            response = injector.trigger_bus_off(args.node, args.seconds)
-            _print_response("bus-off injected", response)
+            injector.trigger_bus_off(args.node, args.seconds)
+            _emit(args, "bus-off injected", client)
             time.sleep(args.seconds + 0.3)
-            _print_response("bus-off recovery check", client.tester_present())
+            client.tester_present()
+            _emit(args, "bus-off recovery check", client)
         elif args.type == "nrc":
-            response = injector.inject_nrc(args.node, args.service, args.nrc)
-            _print_response("NRC injection armed", response)
+            injector.inject_nrc(args.node, args.service, args.nrc)
+            _emit(args, "NRC injection armed", client)
             try:
                 client.read_data_by_identifier(DID_ECU_NAME)
             except NegativeResponse as exc:
                 print(f"negative response observed: {exc}")
         else:
-            _print_response("faults cleared", injector.clear_faults(args.node))
+            injector.clear_faults(args.node)
+            _emit(args, "faults cleared", client)
         return 0
     finally:
         cleanup()
@@ -460,14 +499,15 @@ def cmd_security(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     try:
         client.change_session(0x03)
+        _emit(args, "session control", client)
         seed = client.request_seed(args.level)
-        _print_response("seed", seed)
+        _emit(args, "request seed", client)
         if seed == bytes(4):
             print("ECU already unlocked")
             return 0
         key = seed_to_key(int.from_bytes(seed, "big"), DEFAULT_SECURITY_SALT)
-        response = client.send_key(key.to_bytes(4, "big"), args.level)
-        _print_response("send key", response)
+        client.send_key(key.to_bytes(4, "big"), args.level)
+        _emit(args, "send key", client)
         return 0
     finally:
         cleanup()
@@ -514,8 +554,25 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         return handler(args)
+    except NegativeResponse as exc:
+        info = getattr(exc, "exchange", None)
+        if args.json and info is not None:
+            print(json.dumps(exchange_to_dict(info, "negative response"), ensure_ascii=False))
+        elif info is not None:
+            print(f"negative response: {format_exchange(info)}", file=sys.stderr)
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        return 1
     except (TimeoutError, UdsError, ValueError, KeyError, OSError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        if args.json:
+            print(
+                json.dumps(
+                    {"error": str(exc), "type": type(exc).__name__},
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(f"error: {exc}", file=sys.stderr)
         return 1
 
 

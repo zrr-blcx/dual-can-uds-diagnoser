@@ -24,7 +24,7 @@ def _build_ecu_and_client(channel: str) -> tuple[VirtualEcu, UdsClient, MemoryBu
     ecu = VirtualEcu("ecu1", ecu_bus, 0x7E0, 0x7E8)
     ecu.start()
     transport = IsoTpTransport(tester_bus, txid=0x7E0, rxid=0x7E8, timeout=1.0)
-    client = UdsClient(transport, timeout=1.0)
+    client = UdsClient(transport, timeout=1.0, retries=0)
     return ecu, client, ecu_bus, tester_bus
 
 

@@ -10,6 +10,11 @@ UDS layer        diagnoser.uds (0x10/0x22/0x27/0x2E/0x31/0x3E, NRC)
 ISO-TP layer     diagnoser.transport.isotp
 CAN layer        python-can bus adapter + diagnoser.tools.can_health
 
+Diagnostic client timing (Week 6 Alpha)
+  UdsClient: P2/P2* waits, 0x78 handling, timeout retries, ExchangeInfo
+  diagnoser.tools.console: timestamped text and JSON Lines output
+  diagnoser.transport.udsoncan_link: optional udsoncan connection adapter
+
 STM32 ECU
 ==================
 Application layer

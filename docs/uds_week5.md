@@ -86,14 +86,17 @@ Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调�
 
 | Routine ID | 名称 | 会话 | 解锁要求 | 行为 |
 | --- | --- | --- | --- | --- |
-| `0x0203` | 自检 | Extended/Programming | 否 | Start 后进入 Running；首次 RequestResults 返回 NRC `0x78`，下一次返回完成结果 |
-| `0xFF00` | 擦除 | Extended/Programming | 是 | 当前为可移植模拟实现，首次 RequestResults 返回 NRC `0x78`，下一次返回完成结果 |
+| `0x0203` | 自检 | Extended/Programming | 否 | Start 后进入 Running；RequestResults 时先回 NRC `0x78`，随后 ECU 主动发送最终正响应 |
+| `0xFF00` | 擦除 | Extended/Programming | 是 | 当前为可移植模拟实现；与自检相同的 `0x78` + 最终响应时序 |
 
 处理规则：
 
 - Running 状态下重复 Start：NRC `0x22`。
 - 非 Running 状态下 Stop：NRC `0x24`。
 - Start 之前 RequestResults：NRC `0x24`。
+- RequestResults 期间 ECU 先回 `7F 31 78`，再按 P2* 发送最终正响应；
+  Python 诊断仪自动等待，固件 C 核心通过 `UDS_PROCESS_RESPONSE_PENDING`
+  由应用层安排后续响应。
 - 未定义的 Routine ID：NRC `0x31`。
 - 未支持子功能：NRC `0x12`。
 - 会话不允许：NRC `0x7E`。

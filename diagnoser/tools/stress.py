@@ -61,9 +61,12 @@ def run_stress(
         target_load=target_load,
     )
     metrics = {name: NodeMetrics() for name in clients}
+    original_retries = {name: client.retries for name, client in clients.items()}
     load_sim.start()
     started = time.perf_counter()
     try:
+        for client in clients.values():
+            client.retries = 0
         names = list(clients)
         for index in range(requests):
             node = names[index % len(names)]
@@ -81,6 +84,8 @@ def run_stress(
                 metric.rtts.append(time.perf_counter() - started_request)
     finally:
         load_sim.stop()
+        for name, client in clients.items():
+            client.retries = original_retries[name]
 
     duration = time.perf_counter() - started
     total_ok = sum(m.ok for m in metrics.values())

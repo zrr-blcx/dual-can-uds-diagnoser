@@ -32,6 +32,9 @@ class NetworkConfig:
     baudrate: int = 500000
     timeout: float = 2.0
     padding: int = 0xCC
+    p2_ms: float = 50.0
+    p2_star_ms: float = 5000.0
+    retries: int = 1
     ecus: list[EcuConfig] = field(default_factory=list)
 
     @classmethod
@@ -42,6 +45,9 @@ class NetworkConfig:
             baudrate=int(raw.get("baudrate", 500000)),
             timeout=float(raw.get("timeout", 2.0)),
             padding=int(raw.get("padding", "0xCC"), 0),
+            p2_ms=float(raw.get("p2_ms", 50.0)),
+            p2_star_ms=float(raw.get("p2_star_ms", 5000.0)),
+            retries=int(raw.get("retries", 1)),
             ecus=[EcuConfig.from_dict(item) for item in raw.get("ecus", [])],
         )
 
@@ -64,6 +70,9 @@ def default_network() -> NetworkConfig:
         baudrate=500000,
         timeout=2.0,
         padding=0xCC,
+        p2_ms=50.0,
+        p2_star_ms=5000.0,
+        retries=1,
         ecus=[
             EcuConfig(name="ecu1", request_id=0x7E0, response_id=0x7E8),
             EcuConfig(name="ecu2", request_id=0x7E1, response_id=0x7E9),

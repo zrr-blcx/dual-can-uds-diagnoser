@@ -91,6 +91,7 @@ STM32 validation remains Target.
 | 2026-09-20 | 3.12.13 (`.venv`) | `python -m pytest` | `36 passed`, 1 cache-permission warning |
 | 2026-09-27 | 3.12.13 (`.venv`) | `python -m pytest` | `39 passed`, 1 cache-permission warning |
 | 2026-10-04 | 3.12.13 (`.venv`) | `python -m pytest` | `48 passed`, 1 cache-permission warning |
+| 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
 
 The `py` launcher was unavailable in the current Windows shell, so the project
 virtual environment was used for the complete regression. The warning came from
@@ -102,6 +103,11 @@ service layer (`uds_server.c`, `uds_reference_routines.c`, `uds_did_db.c`,
 session transitions, S3 timeout and refresh, `0x22` reads, `0x27` seed/key
 state, `0x2E` write rules, `0x31` Start/Stop/RequestResults, `0x78` response
 pending, F407/F103 DID differences, and the full NRC matrix.
+
+The 2026-10-11 run builds that binary in the repository-local `.host_test`
+directory instead of the platform temp directory. The new tests cover
+`UdsClient` timing/retry behavior, `0x78` waiting, console formatting, JSON
+output, and `udsoncan` interoperability.
 
 ## Firmware Build Validation
 
@@ -172,6 +178,28 @@ Run the workflow directly:
 The C host test also confirms that the full service layer compiles into both
 STM32 targets. Real CANable capture and F407/F103 hardware acceptance remain
 Target because the ISO-TP firmware path is still pending.
+
+## Week 6 Diagnostic Tool V1.0 Alpha Validation
+
+Measured on 2026-10-11 with the virtual ECU and MemoryBus. No firmware source
+changed in Week 6, so the 2026-10-04 firmware build sizes still apply.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| `0x78` then final response | Client waits P2* and returns `71 03 ...` | PASS |
+| Raw `0x78` observation | `handle_response_pending=False` raises NRC `0x78` | PASS |
+| Timeout retry | First receive times out, second succeeds, `retries=1` | PASS |
+| Retries exhausted | `TimeoutError` after the configured attempts | PASS |
+| Text output | Timestamp, TX/RX IDs, bytes, elapsed ms, NRC name | PASS |
+| JSON Lines output | Positive and negative exchanges are valid JSON | PASS |
+| udsoncan interop | `change_session` and `read_data_by_identifier(0xF190)` | PASS |
+| udsoncan negative response | NRC `0x31` raises `NegativeResponseException` | PASS |
+| Bus-Off offline detection | Offline window still observed with retries disabled | PASS |
+| Dual-node virtual full flow | `ecu1` and `ecu2` `uds-week5` PASS | PASS |
+| CLI JSON smoke | `--json read-did` and negative response | PASS |
+
+Real CANable capture, F407/F103 physical addressing, and hardware timing
+measurements remain Target until the ISO-TP firmware path is available.
 
 ## Week 1 CAN Baseline
 

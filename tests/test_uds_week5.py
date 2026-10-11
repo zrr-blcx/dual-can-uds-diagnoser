@@ -111,16 +111,6 @@ def test_week5_nrc_matrix() -> None:
             0x22,
         )
 
-        # 0x78: a running routine answers with response-pending.
-        client.routine_control(ROUTINE_CONTROL_START, ROUTINE_SELF_TEST)
-        _expect_nrc(
-            client,
-            lambda: client.routine_control(
-                ROUTINE_CONTROL_REQUEST_RESULTS, ROUTINE_SELF_TEST
-            ),
-            0x78,
-        )
-
         # 0x7E: write in the default session.
         client.change_session(SESSION_DEFAULT)
         _expect_nrc(
@@ -185,18 +175,50 @@ def test_erase_requires_unlock() -> None:
         )
         client.unlock()
         client.routine_control(ROUTINE_CONTROL_START, ROUTINE_ERASE)
-        _expect_nrc(
-            client,
-            lambda: client.routine_control(
-                ROUTINE_CONTROL_REQUEST_RESULTS, ROUTINE_ERASE
-            ),
-            0x78,
-        )
         result = client.routine_control(
             ROUTINE_CONTROL_REQUEST_RESULTS, ROUTINE_ERASE
         )
         assert result == bytes([0xFF, 0x00]) + b"\x00"
+        assert client.last_exchange is not None
+        assert client.last_exchange.pending_responses == 1
     finally:
+        ecu.stop()
+        ecu_bus.shutdown()
+        tester_bus.shutdown()
+
+
+def test_client_waits_for_response_pending() -> None:
+    ecu, client, ecu_bus, tester_bus = _build_pair("week5-pending")
+    try:
+        client.change_session(SESSION_EXTENDED)
+        client.routine_control(ROUTINE_CONTROL_START, ROUTINE_SELF_TEST)
+        result = client.routine_control(
+            ROUTINE_CONTROL_REQUEST_RESULTS, ROUTINE_SELF_TEST
+        )
+        assert result == bytes([0x02, 0x03]) + b"\x00"
+        assert client.last_exchange is not None
+        assert client.last_exchange.pending_responses == 1
+    finally:
+        ecu.stop()
+        ecu_bus.shutdown()
+        tester_bus.shutdown()
+
+
+def test_raw_response_pending_can_be_observed() -> None:
+    ecu, client, ecu_bus, tester_bus = _build_pair("week5-pending-raw")
+    try:
+        client.change_session(SESSION_EXTENDED)
+        client.routine_control(ROUTINE_CONTROL_START, ROUTINE_SELF_TEST)
+
+        client.handle_response_pending = False
+        with pytest.raises(NegativeResponse) as exc_info:
+            client.routine_control(ROUTINE_CONTROL_REQUEST_RESULTS, ROUTINE_SELF_TEST)
+        assert exc_info.value.nrc == 0x78
+
+        final = client.transport.receive(timeout=1.0)
+        assert final[:4] == bytes([0x71, 0x03, 0x02, 0x03])
+    finally:
+        client.handle_response_pending = True
         ecu.stop()
         ecu_bus.shutdown()
         tester_bus.shutdown()

@@ -1,3 +1,5 @@
+import json
+
 from diagnoser.cli import main
 
 
@@ -48,3 +50,28 @@ def test_cli_secure_write_smoke() -> None:
         )
         == 0
     )
+
+
+def test_cli_json_positive_exchange(capsys) -> None:
+    assert main(["--json", "read-did", "--node", "ecu1", "0xF190"]) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    payload = json.loads(lines[-1])
+
+    assert payload["title"] == "read DID 0xF190"
+    assert payload["response"].startswith("62 F1 90")
+    assert payload["elapsed_ms"] >= 0
+    assert payload["negative"] is False
+
+
+def test_cli_json_negative_exchange(capsys) -> None:
+    assert main(["--json", "read-did", "--node", "ecu1", "0xFFFF"]) == 1
+    lines = capsys.readouterr().out.strip().splitlines()
+    payload = json.loads(lines[-1])
+
+    assert payload["negative"] is True
+    assert payload["nrc"] == "0x31"
+    assert payload["nrc_name"] == "requestOutOfRange"
+
+
+def test_cli_retries_option_smoke() -> None:
+    assert main(["--retries", "0", "session", "--node", "ecu2", "0x03"]) == 0
