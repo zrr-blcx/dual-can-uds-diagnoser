@@ -1,3 +1,8 @@
+﻿param(
+    [switch]$WwdgSelfTest,
+    [switch]$WwdgEarlyFeedTest
+)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -46,6 +51,18 @@ $commonFlags = @(
     '--specs=nano.specs',
     '-mthumb'
 )
+
+if ($WwdgSelfTest -and $WwdgEarlyFeedTest) {
+    throw 'Choose either -WwdgSelfTest or -WwdgEarlyFeedTest, not both.'
+}
+if ($WwdgSelfTest) {
+    $commonFlags += '-DAPP_WWDG_SELFTEST=1U'
+    Write-Host 'WWDG SELF TEST: stop refreshing WWDG'
+}
+if ($WwdgEarlyFeedTest) {
+    $commonFlags += '-DAPP_WWDG_EARLY_FEED_TEST=1U'
+    Write-Host 'WWDG EARLY FEED TEST: refresh before the window opens'
+}
 
 $sources = @()
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File

@@ -248,6 +248,32 @@ The exported health snapshot now synchronizes TEC/REC/BOFF from the controller
 ESR on every refresh. Before that fix the hardware ESR was already zero while
 the RAM snapshot retained the previous error-passive value.
 
+## WWDG Validation
+
+The common watchdog module now starts the WWDG from PCLK1, uses a /8 prescaler,
+programs window `0x68`, and refreshes every 30 ms in the main loop. Compile-time
+checks reject an invalid window or a zero refresh interval.
+
+| Test | Software/build result | Hardware result |
+| --- | --- | --- |
+| Normal WWDG service on F407/F103 | PASS, both builds link WWDG functions | PASS, 35 s run with no WWDG/IWDG reset; Tick and TX/RX kept increasing |
+| Stop-refresh self-test | PASS, both builds produce test images | PASS on F407, `WWDGRSTF=1`, `IWDGRSTF=0` |
+| Early-refresh self-test | PASS, both builds produce test images | PASS on F103, `WWDGRSTF=1`, `IWDGRSTF=0`, Tick stayed 0 in reset cycle |
+| IWDG isolation during WWDG reset | Test modes keep IWDG fed | PASS, `IWDGRSTF=0` in both test modes |
+
+The F407 WWDG is implemented directly through the CMSIS register map, matching
+the existing register-level IWDG approach; no CubeF4 package is required.
+
+Final CAN regression after restoring the normal WWDG images:
+
+| Metric | Result |
+| --- | --- |
+| Capture | 39 frames / 10 s |
+| Average same-ID interval | 253.0 ms |
+| Maximum same-ID interval | 340.9 ms |
+| F407 health | error-active, TEC/REC=0/0, Bus-Off=0 |
+| F103 health | error-active, TEC/REC=0/0, Bus-Off=0 |
+
 ## Week 1 CAN Baseline
 
 Measured on 2026-09-20 with both programmed nodes connected to the same

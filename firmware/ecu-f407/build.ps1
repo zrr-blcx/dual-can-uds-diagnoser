@@ -1,5 +1,7 @@
 ﻿param(
-    [switch]$FastTxTest
+    [switch]$FastTxTest,
+    [switch]$WwdgSelfTest,
+    [switch]$WwdgEarlyFeedTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +58,18 @@ $commonFlags = @(
 if ($FastTxTest) {
     $commonFlags += '-DAPP_CAN_FAST_TX_TEST=1U'
     Write-Host 'FAST TX TEST: APP_CAN_FAST_TX_TEST=1U'
+}
+
+if ($WwdgSelfTest -and $WwdgEarlyFeedTest) {
+    throw 'Choose either -WwdgSelfTest or -WwdgEarlyFeedTest, not both.'
+}
+if ($WwdgSelfTest) {
+    $commonFlags += '-DAPP_WWDG_SELFTEST=1U'
+    Write-Host 'WWDG SELF TEST: stop refreshing WWDG'
+}
+if ($WwdgEarlyFeedTest) {
+    $commonFlags += '-DAPP_WWDG_EARLY_FEED_TEST=1U'
+    Write-Host 'WWDG EARLY FEED TEST: refresh before the window opens'
 }
 
 $sources = @()

@@ -59,6 +59,8 @@
   failures produce `SFTRSTF=1` with `IWDGRSTF=0`.
 - Synchronize the exported CAN health snapshot from the hardware ESR on every
   refresh so it returns to error-active after the bus is restored.
+- Add a register-level window watchdog to both STM32 nodes, with a 30 ms
+  refresh service point and build-time stop-refresh / early-refresh tests.
 - Wire the policy core into the CAN driver: error interrupts, TEC/REC/BOFF read
   from ESR, error-code classification with host tests, and
   `CanDriver_Recover()`; `AutoBusOff` is disabled so software recovery stays

@@ -74,6 +74,17 @@
 #define APP_IWDG_SELFTEST 0U
 #endif
 
+/* WWDG bring-up tests. Normal builds service the WWDG every 30 ms. */
+#ifndef APP_WWDG_SELFTEST
+#define APP_WWDG_SELFTEST 0U
+#endif
+#ifndef APP_WWDG_EARLY_FEED_TEST
+#define APP_WWDG_EARLY_FEED_TEST 0U
+#endif
+#if APP_WWDG_SELFTEST && APP_WWDG_EARLY_FEED_TEST
+#error "Select only one WWDG self-test mode"
+#endif
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -189,6 +200,14 @@ int main(void)
     Error_Handler();
   }
 
+#ifdef DEBUG
+  __HAL_DBGMCU_FREEZE_WWDG();
+#endif
+  if (!Watchdog_WwdgInit(HAL_GetTick()))
+  {
+    Error_Handler();
+  }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -215,6 +234,15 @@ int main(void)
     /* self-test: intentionally stop feeding the watchdog */
 #else
     Watchdog_Kick();
+#endif
+
+#if APP_WWDG_SELFTEST
+    /* self-test: keep IWDG fed, but intentionally stop refreshing the WWDG */
+#elif APP_WWDG_EARLY_FEED_TEST
+    /* self-test: refresh before the window opens, which must reset the MCU */
+    Watchdog_WwdgKick();
+#else
+    Watchdog_WwdgService(now);
 #endif
 
     HAL_Delay(10U);
