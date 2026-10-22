@@ -17,6 +17,9 @@
   rules, routine control, NRC coverage, and dual-node virtual flow.
 - Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` wait, timeout
   retries, timestamped/JSON output, CANable config, and udsoncan interop.
+- Week 2 CAN health and Bus-Off recovery: SCE error handling, IWDG,
+  hardware-synchronized health snapshots, 3/3 automatic recovery events,
+  and verified software-reset escalation after three recovery failures.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
@@ -25,12 +28,13 @@
 - UDS 诊断客户端、NRC 处理与编码，支持 0x10/0x22/0x27/0x2E/0x31/0x3E
 - ISO 15765-2 多帧分包/组包与流控
 - 虚拟 ECU 与内存总线仿真，无需硬件即可验证协议栈
-- CAN 错误状态、Bus-Off 恢复策略与 IWDG/WWDG 看门狗监督模型
+- CAN 错误状态、Bus-Off 恢复策略与 IWDG 监督；WWDG 暂保留在策略模型中
 - DBC 文件生成与 C/Python 信号结构体自动生成
 - 总线负载模拟、压力测试、故障注入与报告工具
 - 双节点请求调度与编程会话互斥
 - 诊断仪 Alpha：P2/P2* 时序、`0x78` 响应挂起等待、超时重试、时间戳与
   JSON Lines 输出、udsoncan 互操作适配
+- 原始 CAN 帧抓取与同 ID 帧间隔统计（`trace`），用于测量 Bus-Off 离线窗口
 
 ## 架构
 
@@ -78,6 +82,19 @@ py -3.14 -m diagnoser.cli --retries 2 --p2-star 5000 read-did --node ecu1 0xF190
 
 ```powershell
 py -3.14 -m diagnoser.cli --config configs/canable.example.json --channel COMx read-did --node ecu1 0xF190
+```
+
+candleLight（`gs_usb`）固件的 CANable：
+
+```powershell
+py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json read-did --node ecu1 0xF190
+```
+
+抓原始 CAN 帧并统计同 ID 帧间隔（量 Bus-Off 离线窗口用）：
+
+```powershell
+py -3.14 -m diagnoser.cli --config configs/canable.example.json --channel COMx trace --seconds 10 --id 0x123
+py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --seconds 10 --id 0x123 --report outputs/trace.md
 ```
 
 诊断仪 Alpha 说明、命令列表与输出格式见

@@ -104,6 +104,10 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef *hcan)
 
   HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 0U, 0U);
   HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
+
+  /* Status change error interrupt: Bus-Off, error passive, last error code. */
+  HAL_NVIC_SetPriority(CAN1_SCE_IRQn, 0U, 0U);
+  HAL_NVIC_EnableIRQ(CAN1_SCE_IRQn);
 }
 
 /* USER CODE END 1 */

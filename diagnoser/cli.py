@@ -9,6 +9,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from can import CanError
+
 from diagnoser.config import NetworkConfig
 from diagnoser.dbc.generator import (
     CanMessage,
@@ -25,6 +27,7 @@ from diagnoser.tools.fault_injection import FaultInjector
 from diagnoser.tools.report import render_markdown
 from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
 from diagnoser.tools.stress import run_stress
+from diagnoser.tools.trace import DEFAULT_TRACE_ID, render_trace, run_trace
 from diagnoser.tools.uds_smoke import render_uds_smoke, run_uds_smoke
 from diagnoser.tools.uds_week5 import render_uds_week5, run_uds_week5
 from diagnoser.transport import create_bus
@@ -148,6 +151,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_uds_week5.add_argument("--node", default="ecu1")
     p_uds_week5.add_argument("--report", help="optional markdown report output path")
+
+    p_trace = sub.add_parser(
+        "trace",
+        help="trace raw CAN frames and report per-ID inter-frame gaps",
+    )
+    p_trace.add_argument(
+        "--id",
+        type=lambda s: int(s, 0),
+        default=DEFAULT_TRACE_ID,
+        help="arbitration ID featured in the gap summary (default 0x123)",
+    )
+    p_trace.add_argument("--seconds", type=float, default=5.0, help="capture window")
+    p_trace.add_argument("--max-frames", type=int, help="stop after this many frames")
+    p_trace.add_argument("--quiet", action="store_true", help="print only the summary")
+    p_trace.add_argument("--report", help="optional markdown report output path")
 
     return parser
 
@@ -529,6 +547,42 @@ def cmd_uds_week5(args: argparse.Namespace) -> int:
         cleanup()
 
 
+def cmd_trace(args: argparse.Namespace) -> int:
+    config = _network(args)
+    if config.interface == "memory":
+        # The memory bus routes by arbitration ID, so the tracer listens on the
+        # focus ID and only sees frames sent to it.
+        bus = MemoryBus(config.channel, node_id=args.id, bitrate=config.baudrate)
+    else:
+        bus = create_bus(config)
+
+    try:
+        print(
+            f"tracing {config.interface}:{config.channel} for {args.seconds:.1f} s "
+            f"(focus ID 0x{args.id:X})"
+        )
+        result = run_trace(bus, seconds=args.seconds, max_frames=args.max_frames)
+    finally:
+        bus.shutdown()
+
+    if args.json:
+        for frame in result.frames:
+            print(json.dumps(frame.as_dict(), ensure_ascii=False))
+    elif not args.quiet:
+        for frame in result.frames:
+            print(frame.format_line())
+
+    if not args.json:
+        report = render_trace(result, focus_id=args.id)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -547,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         "uds-smoke": cmd_uds_smoke,
         "security": cmd_security,
         "uds-week5": cmd_uds_week5,
+        "trace": cmd_trace,
     }
     handler = handlers.get(args.command)
     if handler is None:
@@ -563,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
-    except (TimeoutError, UdsError, ValueError, KeyError, OSError) as exc:
+    except (TimeoutError, UdsError, ValueError, KeyError, OSError, CanError) as exc:
         if args.json:
             print(
                 json.dumps(

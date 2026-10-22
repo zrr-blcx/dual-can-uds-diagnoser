@@ -1,3 +1,7 @@
+﻿param(
+    [switch]$FastTxTest
+)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -49,10 +53,17 @@ $commonFlags = @(
     '-mthumb'
 )
 
+if ($FastTxTest) {
+    $commonFlags += '-DAPP_CAN_FAST_TX_TEST=1U'
+    Write-Host 'FAST TX TEST: APP_CAN_FAST_TX_TEST=1U'
+}
+
 $sources = @()
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Src') -Filter '*.c' -File
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_health.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\watchdog.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_did_db.c')

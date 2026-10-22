@@ -1,0 +1,207 @@
+digraph week2_stlink_debug_isolate_wiring {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.40",
+        ranksep="0.95",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="第 2 周 Phase 3 接线与复盘：ST-Link 烧写/读内存 + CANable 抓包\n双探针可用序列号选择；listen-only 未触发 Bus-Off，最终改用 CH2 物理短接"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_f407 {
+        label="节点 1：STM32F407ZGT6（ecu1）—— 烧写与实测目标";
+        color="#1565c0";
+        style="rounded,filled";
+        fillcolor="#e3f2fd";
+
+        F407_MCU [
+            label="STM32F407ZGT6\nCAN1: PA12 (TX) / PA11 (RX)\n3.3V / GND（USB 供电）",
+            fillcolor="#bbdefb"
+        ];
+        SN1 [
+            label="SN65HVD230 #1\n自带 120Ω 终接\nVCC=3.3V  RS->GND",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        F407_SWD [
+            label="SWD 4 针\n3.3V / GND / PA13 (SWDIO) / PA14 (SWCLK)",
+            fillcolor="#ede7f6",
+            shape=box
+        ];
+    }
+
+    subgraph cluster_f103 {
+        label="节点 2：STM32F103C8T6（ecu2）—— 隔离实测时必须断电或拔总线";
+        color="#9e9e9e";
+        style="rounded,dashed,filled";
+        fillcolor="#f5f5f5";
+
+        F103_MCU [
+            label="STM32F103C8T6\nCAN1: PA12 / PA11\n隔离实测期间：拔 USB 或拔 CANH/CANL",
+            fillcolor="#e0e0e0",
+            style="rounded,dashed,filled"
+        ];
+        SN2 [
+            label="SN65HVD230 #2\n自带 120Ω 终接",
+            fillcolor="#eeeeee",
+            style="rounded,dashed,filled"
+        ];
+        F103_SWD [
+            label="SWD 4 针\n烧完 ecu1 后把 ST-Link 换到这里",
+            fillcolor="#eeeeee",
+            shape=box,
+            style="rounded,dashed,filled"
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="CAN 总线（CANH/CANL 双绞线，两个模块自带 120Ω，合计约 60Ω）";
+        color="#ef6c00";
+        style="rounded,filled";
+        fillcolor="#fff3e0";
+
+        BUS_H [
+            label="CANH 主干",
+            fillcolor="#ffe0b2",
+            shape=box
+        ];
+        BUS_L [
+            label="CANL 主干",
+            fillcolor="#ffe0b2",
+            shape=box
+        ];
+        TERM [
+            label="两个模块自带 120Ω\n断电测 CANH-CANL ≈ 60Ω",
+            fillcolor="#fff9c4",
+            shape=box
+        ];
+    }
+
+    subgraph cluster_stlink {
+        label="PC 侧 A：ST-Link —— 烧写、校验、读内存";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        STLINK [
+            label="ST-Link V2\nSWDIO / SWCLK / GND / 3.3V\nUSB 接 PC",
+            fillcolor="#e1bee7",
+            shape=box,
+            penwidth=2
+        ];
+        CLI [
+            label="PowerShell\nSTM32_Programmer_CLI\n-w 烧写  -v 校验  -u 读内存",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+    }
+
+    subgraph cluster_canable {
+        label="PC 侧 B：MKS CANable V2.0 Pro —— 抓包与隔离注入";
+        color="#00695c";
+        style="rounded,filled";
+        fillcolor="#e0f2f1";
+
+        CANABLE [
+            label="CANable（COMx）\n正常模式 = 回 ACK\nlisten-only = 不回 ACK（诊断实验）\n实测只到 error-passive，TEC 冻结 128\n板载 120Ω 开关必须关闭",
+            fillcolor="#b2dfdb",
+            shape=box,
+            penwidth=2
+        ];
+        TOOLS [
+            label="diagnoser.cli trace（抓 0x123）\n总线隔离与恢复测试.py（隔离 + 恢复）",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+    }
+
+    subgraph cluster_notes {
+        label="操作顺序与注意";
+        color="#37474f";
+        style="rounded,filled";
+        fillcolor="#eceff1";
+
+        STEP1 [
+            label="① 烧写：ST-Link 接 F407 → -w ecu-f407.hex -v -rst → 换接 F103 同样烧写",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+        STEP2 [
+            label="② 门禁：CANable 正常模式抓 10 s，确认 0x123 无退化、无错误帧",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+        STEP3 [
+            label="③ 历史隔离实验：拔掉节点 2 → CANable listen-only\n结果：ACK 错误增长，但 TEC 冻结 128，未进入 Bus-Off\n最终改为 CH2 短接 CANH-CANL 完成物理验收",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+        STEP4 [
+            label="④ 读快照：nm 取 g_can_health_summary 地址 →\nSTM32_Programmer_CLI -u <地址> 4 snapshot.bin",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+        SAFE [
+            label="注意：IWDG 已开启（约 1 s）。\n不要用断点长时间暂停（会被复位）；\n需要暂停时先加 __HAL_DBGMCU_FREEZE_IWDG()。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    /* ST-Link 与 SWD */
+    F407_SWD -> STLINK [label="SWD 4 线", color="#6a1b9a", penwidth=2];
+    STLINK -> F103_SWD [
+        label="烧完再换接（不可同时）",
+        style=dashed,
+        color="#9e9e9e",
+        constraint=false
+    ];
+    STLINK -> CLI [label="USB", style=dashed];
+
+    /* 节点到总线 */
+    F407_MCU -> SN1 [label="PA12 → TXD\nRXD → PA11"];
+    SN1 -> BUS_H [label="CANH"];
+    SN1 -> BUS_L [label="CANL"];
+    F103_MCU -> SN2 [label="PA12 / PA11", style=dashed, color="#9e9e9e"];
+    SN2 -> BUS_H [style=dashed, color="#9e9e9e"];
+    SN2 -> BUS_L [style=dashed, color="#9e9e9e"];
+    BUS_H -> TERM [dir=none];
+    TERM -> BUS_L [dir=none];
+
+    /* CANable 挂总线 */
+    CANABLE -> BUS_H [label="CANH", color="#00695c"];
+    CANABLE -> BUS_L [label="CANL", color="#00695c"];
+    CANABLE -> TOOLS [label="USB", style=dashed];
+
+    /* 操作顺序串起来 */
+    STEP1 -> STEP2 -> STEP3 -> STEP4 [style=dotted, color="#37474f"];
+    CLI -> STEP1 [style=dotted, color="#37474f", constraint=false];
+    TOOLS -> STEP2 [style=dotted, color="#37474f", constraint=false];
+    TOOLS -> STEP3 [style=dotted, color="#37474f", constraint=false];
+    SAFE -> STEP3 [style=dotted, color="#ef6c00", constraint=false];
+}

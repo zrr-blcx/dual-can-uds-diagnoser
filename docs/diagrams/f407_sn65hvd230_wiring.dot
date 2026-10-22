@@ -116,7 +116,7 @@ digraph f407_sn65hvd230_wiring {
             fillcolor="#d1c4e9"
         ];
         TERM1 [
-            label="120Ω 终接电阻 #1\n只跨接在 CANH-CANL 之间\n0.25W，引线尽量短",
+            label="120Ω 终接 #1\n由 SN65HVD230 模块自带\n跨接 CANH-CANL，无需外接",
             fillcolor="#ffcdd2",
             color="#c62828",
             penwidth=3
@@ -158,7 +158,7 @@ digraph f407_sn65hvd230_wiring {
             fillcolor="#ffffff"
         ];
         TERM2 [
-            label="120Ω 终接电阻 #2\n放在总线的另一物理端\n断电测量 CANH-CANL 约 60Ω",
+            label="120Ω 终接 #2\n第二个模块自带的终接\n两模块即位 → 断电测约 60Ω",
             fillcolor="#ffcdd2",
             color="#c62828",
             penwidth=3,
@@ -198,7 +198,7 @@ digraph f407_sn65hvd230_wiring {
             penwidth=2
         ];
         NOTE_TERM [
-            label="终接电阻不是串在信号线上：\n两端各 120Ω，均跨接在 CANH 与 CANL 之间。",
+            label="模块自带 120Ω，跨接在 CANH 与 CANL 之间，\n不是串在信号线上；两个模块即位 60Ω，\n不要再外加 120Ω 电阻。",
             shape=note,
             fillcolor="#ffebee",
             color="#c62828",

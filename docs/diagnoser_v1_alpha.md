@@ -15,6 +15,10 @@ Alpha 版诊断仪已在主机侧完成验证：虚拟双节点、ISO-TP 传输�
 - `udsoncan` 作为可选互操作库使用，适配层见
   `diagnoser/transport/udsoncan_link.py`。
 - `cantools` 用于 DBC 生成工具。
+- 真实 CANable：slcan 固件需要 `pyserial`；candleLight（`gs_usb`）固件需要
+  `pyusb` + `gs_usb`，Windows 上还需要 `libusb`（提供 `libusb-1.0.dll`）。
+  打开 `gs_usb` 总线时 `diagnoser.transport` 会自动把该 DLL 交给 pyusb，
+  不需要手动拷贝；上述依赖均已随 `requirements.txt` 与 `pyproject.toml` 声明。
 
 安装：
 
@@ -34,6 +38,7 @@ pip install -e ".[dev]"
 | --- | --- |
 | `configs/network.json` | 默认虚拟双节点配置（`memory` 接口） |
 | `configs/canable.example.json` | CANable/slcan 示例；`channel` 是占位符 |
+| `configs/canable.gsusb.example.json` | candleLight/`gs_usb` 示例；`channel` 是设备序号 |
 
 物理寻址：
 
@@ -59,6 +64,12 @@ CANable 使用前把示例里的 `channel` 改成本机串口，但不要把真�
 python -m diagnoser.cli --config configs/canable.example.json --channel COMx read-did --node ecu1 0xF190
 ```
 
+candleLight 固件按设备序号选通道，不需要串口名：
+
+```powershell
+python -m diagnoser.cli --config configs/canable.gsusb.example.json read-did --node ecu1 0xF190
+```
+
 ## 命令
 
 | 命令 | 说明 |
@@ -75,6 +86,7 @@ python -m diagnoser.cli --config configs/canable.example.json --channel COMx rea
 | `stress` | 双节点压力测试 |
 | `fault` | DTC/通信丢失/Bus-Off/NRC 故障注入 |
 | `bus-off-test` | Bus-Off 恢复测试 |
+| `trace` | 抓原始 CAN 帧，统计同 ID 帧间隔（量离线窗口） |
 | `dbc-generate` / `structs` | DBC 与信号结构体生成 |
 
 示例：
@@ -87,6 +99,20 @@ python -m diagnoser.cli write-did --node ecu1 --session 0x03 --unlock 0x0100 DEA
 python -m diagnoser.cli routine --node ecu1 --session 0x03 --unlock 0x0203
 python -m diagnoser.cli uds-week5 --node ecu1
 ```
+
+## 抓包与帧间隔
+
+`trace` 只读总线、不解 UDS，用来确认节点是否在发帧、以及总线中断了多久：
+
+```powershell
+python -m diagnoser.cli --config configs/canable.example.json --channel COMx trace --seconds 10 --id 0x123
+```
+
+- 帧间隔按**同一个 arbitration ID** 的相邻帧计算，其他总线流量不会把间隔算短。
+- 输出每个 ID 的帧数与最小/平均/最大间隔，并标出最大间隔落在哪个 ID。
+- `--quiet` 只打印汇总，`--report` 写 Markdown；`--json` 是全局选项，要写在
+  子命令之前（`--json trace ...`），它按 JSON Lines 打印每帧。
+- `--interface memory` 时按 `--id` 监听，只有发给该 ID 的帧可见。
 
 ## 时序与重试
 

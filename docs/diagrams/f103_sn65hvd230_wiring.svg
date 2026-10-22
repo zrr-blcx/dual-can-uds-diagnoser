@@ -28,8 +28,8 @@
 </g>
 <g id="clust4" class="cluster">
 <title>cluster_bus</title>
-<path fill="#f3e5f5" stroke="#6a1b9a" d="M990.01,-48C990.01,-48 1702.84,-48 1702.84,-48 1708.84,-48 1714.84,-54 1714.84,-60 1714.84,-60 1714.84,-202 1714.84,-202 1714.84,-208 1708.84,-214 1702.84,-214 1702.84,-214 990.01,-214 990.01,-214 984.01,-214 978.01,-208 978.01,-202 978.01,-202 978.01,-60 978.01,-60 978.01,-54 984.01,-48 990.01,-48"/>
-<text text-anchor="middle" x="1346.43" y="-189.1" font-family="Microsoft YaHei" font-size="22.00">面包板 CAN 差分总线</text>
+<path fill="#f3e5f5" stroke="#6a1b9a" d="M984.18,-48C984.18,-48 1702.84,-48 1702.84,-48 1708.84,-48 1714.84,-54 1714.84,-60 1714.84,-60 1714.84,-202 1714.84,-202 1714.84,-208 1708.84,-214 1702.84,-214 1702.84,-214 984.18,-214 984.18,-214 978.18,-214 972.18,-208 972.18,-202 972.18,-202 972.18,-60 972.18,-60 972.18,-54 978.18,-48 984.18,-48"/>
+<text text-anchor="middle" x="1343.51" y="-189.1" font-family="Microsoft YaHei" font-size="22.00">面包板 CAN 差分总线</text>
 </g>
 <g id="clust5" class="cluster">
 <title>cluster_node2</title>
@@ -278,42 +278,42 @@
 <!-- TERM1 -->
 <g id="node18" class="node">
 <title>TERM1</title>
-<ellipse fill="#ffcdd2" stroke="#c62828" stroke-width="3" cx="1105.89" cy="-112" rx="119.88" ry="54.81"/>
-<text text-anchor="middle" x="1105.89" y="-133.6" font-family="Microsoft YaHei" font-size="12.00">120Ω 终接电阻 #1</text>
-<text text-anchor="middle" x="1105.89" y="-117.1" font-family="Microsoft YaHei" font-size="12.00">单节点台架可先接一个</text>
-<text text-anchor="middle" x="1105.89" y="-100.6" font-family="Microsoft YaHei" font-size="12.00">只跨接在 CANH&#45;CANL 之间</text>
-<text text-anchor="middle" x="1105.89" y="-84.1" font-family="Microsoft YaHei" font-size="12.00">0.25W，引线尽量短</text>
+<ellipse fill="#ffcdd2" stroke="#c62828" stroke-width="3" cx="1105.89" cy="-112" rx="125.71" ry="54.81"/>
+<text text-anchor="middle" x="1105.89" y="-133.6" font-family="Microsoft YaHei" font-size="12.00">120Ω 终接 #1</text>
+<text text-anchor="middle" x="1105.89" y="-117.1" font-family="Microsoft YaHei" font-size="12.00">由 SN65HVD230 模块自带</text>
+<text text-anchor="middle" x="1105.89" y="-100.6" font-family="Microsoft YaHei" font-size="12.00">单节点台架有它就够</text>
+<text text-anchor="middle" x="1105.89" y="-84.1" font-family="Microsoft YaHei" font-size="12.00">跨接 CANH&#45;CANL，无需外接</text>
 </g>
 <!-- TERM1&#45;&gt;BUS_H_L -->
 <g id="edge3" class="edge">
 <title>TERM1&#45;&gt;BUS_H_L</title>
-<path fill="none" stroke="#c62828" stroke-width="3" d="M1222.95,-126.23C1266.07,-131.51 1312.9,-137.26 1347.64,-141.52"/>
+<path fill="none" stroke="#c62828" stroke-width="3" d="M1228.45,-126.9C1269.94,-131.99 1314.22,-137.42 1347.47,-141.49"/>
 <text text-anchor="middle" x="1295.65" y="-140.91" font-family="Microsoft YaHei" font-size="11.00">跨接</text>
 </g>
 <!-- TERM1&#45;&gt;BUS_L_L -->
 <g id="edge4" class="edge">
 <title>TERM1&#45;&gt;BUS_L_L</title>
-<path fill="none" stroke="#c62828" stroke-width="3" d="M1222.95,-97.77C1266.71,-92.41 1314.3,-86.57 1349.19,-82.3"/>
+<path fill="none" stroke="#c62828" stroke-width="3" d="M1228.45,-97.1C1270.73,-91.91 1315.9,-86.38 1349.35,-82.28"/>
 <text text-anchor="middle" x="1295.65" y="-95.33" font-family="Microsoft YaHei" font-size="11.00">跨接</text>
 </g>
 <!-- TERM2 -->
 <g id="node20" class="node">
 <title>TERM2</title>
-<ellipse fill="#ffcdd2" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" cx="1970.97" cy="-59" rx="130.48" ry="43.15"/>
-<text text-anchor="middle" x="1970.97" y="-72.35" font-family="Microsoft YaHei" font-size="12.00">120Ω 终接电阻 #2</text>
-<text text-anchor="middle" x="1970.97" y="-55.85" font-family="Microsoft YaHei" font-size="12.00">放在总线的另一物理端</text>
-<text text-anchor="middle" x="1970.97" y="-39.35" font-family="Microsoft YaHei" font-size="12.00">断电测量 CANH&#45;CANL 约 60Ω</text>
+<ellipse fill="#ffcdd2" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" cx="1970.97" cy="-59" rx="121.47" ry="43.15"/>
+<text text-anchor="middle" x="1970.97" y="-72.35" font-family="Microsoft YaHei" font-size="12.00">120Ω 终接 #2</text>
+<text text-anchor="middle" x="1970.97" y="-55.85" font-family="Microsoft YaHei" font-size="12.00">第二个模块自带的终接</text>
+<text text-anchor="middle" x="1970.97" y="-39.35" font-family="Microsoft YaHei" font-size="12.00">两模块即位 → 断电测约 60Ω</text>
 </g>
 <!-- TERM2&#45;&gt;BUS_H_R -->
 <g id="edge15" class="edge">
 <title>TERM2&#45;&gt;BUS_H_R</title>
-<path fill="none" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" d="M1868.92,-87.2C1810.56,-103.49 1740.08,-123.16 1695.42,-135.62"/>
+<path fill="none" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" d="M1873.25,-85.99C1814.08,-102.51 1741.2,-122.85 1695.42,-135.62"/>
 <text text-anchor="middle" x="1755.97" y="-126.25" font-family="Microsoft YaHei" font-size="11.00">跨接</text>
 </g>
 <!-- TERM2&#45;&gt;BUS_L_R -->
 <g id="edge16" class="edge">
 <title>TERM2&#45;&gt;BUS_L_R</title>
-<path fill="none" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" d="M1867.98,-31.16C1827.7,-24.16 1781.24,-21.11 1739.84,-31 1717.49,-36.34 1694.41,-48.28 1677.38,-58.52"/>
+<path fill="none" stroke="#c62828" stroke-width="3" stroke-dasharray="5,2" d="M1873.09,-32.08C1831.66,-24.45 1783,-20.69 1739.84,-31 1717.49,-36.34 1694.41,-48.28 1677.38,-58.52"/>
 <text text-anchor="middle" x="1755.97" y="-35.55" font-family="Microsoft YaHei" font-size="11.00">跨接</text>
 </g>
 <!-- NOTE_F103 -->
@@ -366,11 +366,12 @@
 <!-- NOTE_TERM -->
 <g id="node26" class="node">
 <title>NOTE_TERM</title>
-<polygon fill="#ffebee" stroke="#c62828" stroke-width="2" points="1238.65,-1912.26 967.12,-1912.26 967.12,-1867.74 1244.65,-1867.74 1244.65,-1906.26 1238.65,-1912.26"/>
-<polyline fill="none" stroke="#c62828" stroke-width="2" points="1238.65,-1912.26 1238.65,-1906.26"/>
-<polyline fill="none" stroke="#c62828" stroke-width="2" points="1244.65,-1906.26 1238.65,-1906.26"/>
-<text text-anchor="middle" x="1105.89" y="-1895.1" font-family="Microsoft YaHei" font-size="12.00">终接电阻不是串在信号线上：</text>
-<text text-anchor="middle" x="1105.89" y="-1878.6" font-family="Microsoft YaHei" font-size="12.00">两端各 120Ω，均跨接在 CANH 与 CANL 之间。</text>
+<polygon fill="#ffebee" stroke="#c62828" stroke-width="2" points="1238.65,-1920.51 967.12,-1920.51 967.12,-1859.49 1244.65,-1859.49 1244.65,-1914.51 1238.65,-1920.51"/>
+<polyline fill="none" stroke="#c62828" stroke-width="2" points="1238.65,-1920.51 1238.65,-1914.51"/>
+<polyline fill="none" stroke="#c62828" stroke-width="2" points="1244.65,-1914.51 1238.65,-1914.51"/>
+<text text-anchor="middle" x="1105.89" y="-1903.35" font-family="Microsoft YaHei" font-size="12.00">模块自带 120Ω，跨接在 CANH 与 CANL 之间，</text>
+<text text-anchor="middle" x="1105.89" y="-1886.85" font-family="Microsoft YaHei" font-size="12.00">不是串在信号线上；两个模块即位 60Ω，</text>
+<text text-anchor="middle" x="1105.89" y="-1870.35" font-family="Microsoft YaHei" font-size="12.00">不要再外加 120Ω 电阻。</text>
 </g>
 <!-- NOTE_ACK&#45;&gt;NOTE_TERM -->
 </g>

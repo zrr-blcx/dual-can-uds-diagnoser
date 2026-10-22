@@ -75,3 +75,22 @@ def test_cli_json_negative_exchange(capsys) -> None:
 
 def test_cli_retries_option_smoke() -> None:
     assert main(["--retries", "0", "session", "--node", "ecu2", "0x03"]) == 0
+
+
+def test_cli_reports_unavailable_can_adapter(capsys) -> None:
+    code = main(
+        [
+            "--interface",
+            "slcan",
+            "--channel",
+            "COM99",
+            "trace",
+            "--seconds",
+            "0.1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "error:" in captured.err
+    assert "Traceback" not in captured.err

@@ -8,7 +8,10 @@ version = "1.0.0"
 description = "Dual-node CAN + UDS diagnostic toolchain for STM32F407/F103 validation"
 requires-python = ">=3.10"
 dependencies = [
-    "python-can>=4.3.0",
+    "python-can[serial]>=4.3.0",
+    "pyusb>=1.2.1",
+    "gs_usb>=0.3.1",
+    "libusb>=1.0.26",
     "udsoncan>=1.20.0",
     "cantools>=39.4.0",
 ]

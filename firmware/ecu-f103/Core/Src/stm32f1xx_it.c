@@ -26,3 +26,10 @@ void CAN1_RX0_IRQHandler(void)
 {
   HAL_CAN_IRQHandler(&hcan1);
 }
+
+/* Error interrupts are enabled in CanDriver_Start(); HAL_CAN_IRQHandler ends up
+   in HAL_CAN_ErrorCallback() -> CanDriver_OnErrorIsr(). */
+void CAN1_SCE_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan1);
+}

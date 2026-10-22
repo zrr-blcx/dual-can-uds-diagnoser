@@ -1,0 +1,57 @@
+digraph CANBusWiring {
+  // 双节点 CAN 总线 + CANable 接线图（第 2 周 Phase 0 冒烟测试用）
+  rankdir=LR;
+  graph [bgcolor="white", fontname="Microsoft YaHei", label="双节点 CAN 总线接线图（500 kbps）", labelloc=t, fontsize=20, fontcolor="#1A1B1C", pad="0.3"];
+  node [fontname="Microsoft YaHei", style="rounded,filled", fontsize=12, color="#3B6EA5", fontcolor="#1A1B1C"];
+  edge [fontname="Microsoft YaHei", fontsize=10, color="#666666", arrowsize=0.7];
+
+  // ============ 总线（中间） ============
+  subgraph cluster_bus {
+    label="CAN 总线（双绞线）";
+    style=filled; color="#C9CDD4"; fillcolor="#F7F7F5"; fontcolor="#333333";
+    bCANH [label="CANH", shape=box, fillcolor="#D6E8FA", width=1.0];
+    bCANL [label="CANL", shape=box, fillcolor="#FBE3D6", width=1.0];
+    bGND  [label="GND 共地", shape=box, fillcolor="#E3E3E3", width=1.0];
+    {rank=same; bCANH; bCANL; bGND;}
+  }
+
+  // ============ 节点 A：F407 ============
+  subgraph cluster_f407 {
+    label="节点 A：F407 探索者（正点原子）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    f407 [label="STM32F407ZGT6\nPA11 = CAN1_RX\nPA12 = CAN1_TX", fillcolor="#FFFFFF"];
+    tr407 [label="SN65HVD230 模块\n3.3V 供电\n120Ω 跳线帽 = ON", fillcolor="#E8F1FB"];
+  }
+  f407 -> tr407 [label="TXD -> TXD\nRXD <- RXD", color="#3B6EA5", style=dashed];
+  tr407 -> bCANH [label="CANH", color="#2E6DB4"];
+  tr407 -> bCANL [label="CANL", color="#C25E2E"];
+  tr407 -> bGND  [label="GND", color="#555555"];
+
+  // ============ 诊断仪：CANable ============
+  subgraph cluster_canable {
+    label="诊断仪：CANable 2.0（slcan 固件）";
+    style=filled; color="#6B7280"; fillcolor="#F3F3F2"; fontcolor="#1A1B1C";
+    canable [label="CANable 2.0\n120Ω 开关 = OFF（关闭）\nUSB 供电 + 通信", fillcolor="#FFFFFF"];
+    pc [label="PC\nCANable COMx\npython-can 4.6.1", fillcolor="#FFFFFF"];
+  }
+  canable -> bCANH [label="CANH", color="#2E6DB4"];
+  canable -> bCANL [label="CANL", color="#C25E2E"];
+  canable -> bGND  [label="GND", color="#555555"];
+  canable -> pc [label="USB", color="#6B7280", style=bold];
+
+  // ============ 节点 B：F103 ============
+  subgraph cluster_f103 {
+    label="节点 B：F103 江协板（STM32F103C8T6）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    f103 [label="STM32F103C8T6\nPA11 = CAN_RX\nPA12 = CAN_TX", fillcolor="#FFFFFF"];
+    tr103 [label="SN65HVD230 模块\n3.3V 供电\n120Ω 跳线帽 = ON", fillcolor="#E8F1FB"];
+  }
+  f103 -> tr103 [label="TXD -> TXD\nRXD <- RXD", color="#3B6EA5", style=dashed];
+  tr103 -> bCANH [label="CANH", color="#2E6DB4"];
+  tr103 -> bCANL [label="CANL", color="#C25E2E"];
+  tr103 -> bGND  [label="GND", color="#555555"];
+
+  // ============ 说明 ============
+  note [shape=note, fillcolor="#FFF8DC", color="#B8860B", fontsize=11,
+        label="终端电阻：\nF407 端 120Ω + F103 端 120Ω = 60Ω\nCANable 的 120Ω 必须关闭\n（若 F103 不在总线，则打开 CANable 的 120Ω 补成 60Ω）"];
+}

@@ -1,0 +1,79 @@
+digraph RelayBusOffWiring {
+  // Phase 4 继电器注入 Bus-Off 验收接线图（2026-10-15 r08 修正方案）
+  rankdir=LR;
+  graph [bgcolor="white", fontname="Microsoft YaHei", label="Phase 4 继电器注入 Bus-Off 验收接线图（500 kbps）", labelloc=t, fontsize=20, fontcolor="#1A1B1C", pad="0.3", nodesep="0.5", ranksep="0.8"];
+  node [fontname="Microsoft YaHei", style="rounded,filled", fontsize=12, color="#3B6EA5", fontcolor="#1A1B1C"];
+  edge [fontname="Microsoft YaHei", fontsize=10, color="#666666", arrowsize=0.7];
+
+  // ============ CAN 总线主干（信号线） ============
+  subgraph cluster_bus {
+    label="CAN 总线主干（CANH / CANL 差分线）";
+    style=filled; color="#C9CDD4"; fillcolor="#F7F7F5"; fontcolor="#333333";
+    bCANH [label="CANH", shape=box, fillcolor="#D6E8FA", width=1.0];
+    bCANL [label="CANL", shape=box, fillcolor="#FBE3D6", width=1.0];
+    {rank=same; bCANH; bCANL;}
+  }
+
+  // ============ 公共 GND 网络（面包板蓝轨） ============
+  gnd_rail [label="公共 GND 网络\n（面包板蓝色负极轨）\n所有设备的 GND 必须连到这里", shape=box, fillcolor="#E3E3E3", color="#37474F", penwidth=2, fontsize=12];
+
+  // ============ 被注入节点 A：F407 ============
+  subgraph cluster_f407 {
+    label="节点 A：F407（被注入节点，上电）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    f407 [label="STM32F407ZGT6\nPA11 = CAN1_RX\nPA12 = CAN1_TX", fillcolor="#FFFFFF"];
+    tr407 [label="SN65HVD230 #1\n3.3V 供电\n自带 120Ω = ON", fillcolor="#E8F1FB"];
+    stlink [label="ST-Link V2（SWD）\n3.3V / GND / PA13 / PA14\n烧写 + 读健康快照 + RCC_CSR", fillcolor="#EDE7F6", shape=box, color="#6A4FA3"];
+  }
+  f407 -> tr407 [label="TXD -> TXD\nRXD <- RXD", color="#3B6EA5", style=dashed];
+  stlink -> f407 [label="SWD 4 线\n（3.3V 可不接，板子自供电）", color="#6A4FA3", style=dotted, constraint=false];
+  tr407 -> bCANH [label="CANH", color="#2E6DB4"];
+  tr407 -> bCANL [label="CANL", color="#C25E2E"];
+  tr407 -> gnd_rail [label="GND", color="#555555"];
+  f407 -> gnd_rail [label="板 GND", color="#555555", style=dotted, constraint=false];
+  stlink -> gnd_rail [label="GND（必须共地）", color="#6A4FA3", style=dotted, constraint=false];
+
+  // ============ 继电器注入盒 ============
+  subgraph cluster_relay {
+    label="故障注入：2 通道继电器（5V 光耦隔离）";
+    style=filled; color="#C62828"; fillcolor="#FFEBEE"; fontcolor="#8B1E1E";
+    relay [label="CH1 常闭（NC）串在 CANH 上\n吸合 = 断开 CANH，模拟通信丢失\n实测不能据此声明 Bus-Off（TEC 可冻结在 128）\n\nCH2 常开（NO）跨接 CANH-CANL\n吸合 = 短接总线，是已验证的 Bus-Off 路径\n\nVCC = 5V（VOUT2）\nGND → 公共 GND", fillcolor="#FFCDD2", color="#C62828", penwidth=2];
+    relay_ctrl [label="控制：手动按钮 / USB 脚本\nr11 约 2 秒：3 次 Bus-Off / 3 次恢复\nW2-10 约 8 秒：验证连续失败复位\n达到判据立即释放", fillcolor="#FFFFFF", shape=box];
+  }
+  relay_ctrl -> relay [label="CH1 / CH2 控制", style=dotted, color="#C62828"];
+
+  // ============ 诊断仪：CANable ============
+  subgraph cluster_canable {
+    label="诊断仪：CANable 2.0（slcan 固件）";
+    style=filled; color="#6B7280"; fillcolor="#F3F3F2"; fontcolor="#1A1B1C";
+    canable [label="CANable 2.0\n120Ω 开关 = OFF（必须关闭）\nUSB 供电 + 通信", fillcolor="#FFFFFF"];
+    pc [label="PC\nCOMx\npython-can 4.6.1\ntrace --seconds 20 --id 0x123", fillcolor="#FFFFFF"];
+  }
+  canable -> bCANH [label="CANH", color="#00695C"];
+  canable -> bCANL [label="CANL", color="#00695C"];
+  canable -> gnd_rail [label="GND", color="#555555"];
+  canable -> pc [label="USB", color="#6B7280", style=bold];
+
+  // ============ 节点 B：F103（测试时断电） ============
+  subgraph cluster_f103 {
+    label="节点 B：F103（Phase 4 测试时断电/拔掉）";
+    style=filled; color="#9E9E9E"; fillcolor="#F5F5F5"; fontcolor="#757575";
+    f103 [label="STM32F103C8T6\nPA11 = CAN_RX\nPA12 = CAN_TX", fillcolor="#FFFFFF", style="rounded,filled,dashed"];
+    tr103 [label="SN65HVD230 #2\n自带 120Ω = ON", fillcolor="#EFEFEF", style="rounded,filled,dashed"];
+  }
+  f103 -> tr103 [label="TXD -> TXD\nRXD <- RXD", color="#9E9E9E", style=dashed];
+  tr103 -> bCANH [label="CANH（断开）", color="#B0BEC5", style=dashed];
+  tr103 -> bCANL [label="CANL（断开）", color="#B0BEC5", style=dashed];
+  tr103 -> gnd_rail [label="GND", color="#9E9E9E"];
+  f103 -> gnd_rail [label="板 GND", color="#9E9E9E", style=dotted, constraint=false];
+
+  // 继电器与总线的实际连接
+  tr407 -> relay [label="CANH 经 CH1\n（常闭串入）", color="#C62828"];
+  relay -> bCANH [label="CANH", color="#C62828"];
+  relay -> bCANL [label="CH2 短接路径", color="#D32F2F", style=dashed, constraint=false];
+  relay -> gnd_rail [label="模块 GND\n（5V 电源地）", color="#C62828", style=dotted, constraint=false];
+
+  // ============ 说明 ============
+  note [shape=note, fillcolor="#FFF8DC", color="#B8860B", fontsize=11,
+        label="要点：\n1. 所有 GND 必须连在一起：两块板 / 两个收发器 / CANable / ST-Link / 继电器 5V 电源地 → 面包板蓝轨\n2. CH1 断 CANH 只能模拟通信丢失，不能作为本硬件的 Bus-Off 判据\n3. 终端电阻：双模块自带 120Ω = 约 60Ω；CANable 的 120Ω 必须关闭\n4. Bus-Off 注入使用 CH2 短接 CANH-CANL；r11 约 2 秒验证自动恢复，W2-10 约 8 秒验证复位分支\n5. 恢复窗口 = trace 中最大同 ID 间隔；ST-Link 读健康快照 + RCC_CSR 确认软件复位"];
+}

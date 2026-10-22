@@ -35,3 +35,35 @@
 - Add a `udsoncan` connection adapter and interoperability tests.
 - Keep fault-injection and stress measurements on `retries=0` so retries do not
   hide offline windows or distort loss metrics.
+- Declare `python-can[serial]`, `pyusb`, `gs_usb`, and `libusb` so the slcan and
+  candleLight (`gs_usb`) CANable backends work without extra manual installs,
+  and hand the bundled `libusb-1.0.dll` to pyusb on Windows automatically.
+- Report python-can initialization failures as one error line instead of a
+  traceback when an adapter is missing or a COM port is wrong.
+- Add a candleLight/`gs_usb` network configuration example.
+- Add the `trace` command: raw CAN frame capture with per-ID inter-frame gap
+  statistics, text or JSON Lines frames, and an optional Markdown summary.
+- Add the Week 2 Bus-Off injection wiring diagram covering both ECUs, the fault
+  relay, bus termination, the CANable tap, and the ST-Link measurement path.
+- Correct the termination documentation: the SN65HVD230 modules carry the 120
+  ohm terminators, so no external resistors are added and the CANable
+  termination must stay open.
+- Add `firmware/common/can_health.c/.h`: a HAL-free CAN error counter and
+  Bus-Off recovery policy core with host tests, mirroring the Python model.
+- Add hardware-validated CAN health snapshots and SCE error handling to both
+  STM32 nodes, including IWDG supervision and a two-phase Bus-Off recovery
+  state machine.
+- Validate a physical CANH-CANL fault: 3 Bus-Off events and 3/3 automatic
+  recoveries, with no recovery-chain reset request.
+- Verify the sustained-fault escalation path: three consecutive recovery
+  failures produce `SFTRSTF=1` with `IWDGRSTF=0`.
+- Synchronize the exported CAN health snapshot from the hardware ESR on every
+  refresh so it returns to error-active after the bus is restored.
+- Wire the policy core into the CAN driver: error interrupts, TEC/REC/BOFF read
+  from ESR, error-code classification with host tests, and
+  `CanDriver_Recover()`; `AutoBusOff` is disabled so software recovery stays
+  observable.
+- Assert the HAL error-bit layout with `_Static_assert` so a HAL change cannot
+  silently break the classifier, and add `can_health.c` to both build scripts.
+- Extract the firmware host-test build wrapper into `tests/host_c_build.py` so
+  both portable firmware modules share one compile-and-run helper.

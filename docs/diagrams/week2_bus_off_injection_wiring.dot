@@ -1,0 +1,215 @@
+digraph week2_bus_off_injection_wiring {
+    graph [
+        charset="UTF-8",
+        rankdir=LR,
+        bgcolor="#ffffff",
+        pad="0.35",
+        nodesep="0.40",
+        ranksep="0.90",
+        splines=true,
+        compound=true,
+        fontname="Microsoft YaHei",
+        fontsize=22,
+        labelloc=t,
+        label="第 2 周 CAN 错误统计与 Bus-Off 验证接线图\nF407 + F103 + CANable（继电器已在台架验证），CAN1 500 kbps，两个 SN65HVD230 模块自带 120Ω，全部共地"
+    ];
+
+    node [
+        fontname="Microsoft YaHei",
+        fontsize=12,
+        margin="0.12,0.08",
+        style="rounded,filled",
+        fillcolor="#f8f9fa",
+        color="#495057"
+    ];
+
+    edge [
+        fontname="Microsoft YaHei",
+        fontsize=11,
+        color="#495057",
+        arrowsize=0.75
+    ];
+
+    subgraph cluster_f407 {
+        label="节点 1：STM32F407ZGT6（ecu1）";
+        color="#1565c0";
+        style="rounded,filled";
+        fillcolor="#e3f2fd";
+
+        F407_MCU [
+            label="STM32F407ZGT6\nCAN1: PA12 (TX) / PA11 (RX)\n3.3V / GND（USB 供电）",
+            fillcolor="#bbdefb"
+        ];
+        SN1 [
+            label="SN65HVD230 #1\nVCC=3.3V  GND  RS->GND\nTXD<-PA12   RXD->PA11",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        F407_STLINK [
+            label="ST-Link V2（SWD）\n3.3V GND PA13 PA14\n烧写 + 读健康快照 / RCC_CSR",
+            fillcolor="#ede7f6",
+            shape=box
+        ];
+        F407_LED [
+            label="PF9 指示收到 0x123",
+            fillcolor="#ffffff"
+        ];
+    }
+
+    subgraph cluster_f103 {
+        label="节点 2：STM32F103C8T6（ecu2）";
+        color="#6a1b9a";
+        style="rounded,filled";
+        fillcolor="#f3e5f5";
+
+        F103_MCU [
+            label="STM32F103C8T6\nCAN1: PA12 (TX) / PA11 (RX)\n3.3V / GND（USB 供电）",
+            fillcolor="#e1bee7"
+        ];
+        SN2 [
+            label="SN65HVD230 #2\nVCC=3.3V  GND  RS->GND\nTXD<-PA12   RXD->PA11",
+            fillcolor="#e8f5e9",
+            color="#2e7d32",
+            penwidth=2
+        ];
+        F103_LED [
+            label="PC13 指示收到 0x123",
+            fillcolor="#ffffff"
+        ];
+    }
+
+    subgraph cluster_bus {
+        label="CAN 总线主干（CANH/CANL 双绞线，两个模块自带 120Ω 终接，合计约 60Ω）";
+        color="#ef6c00";
+        style="rounded,filled";
+        fillcolor="#fff3e0";
+
+        BUS_H [
+            label="CANH 主干",
+            fillcolor="#ffe0b2",
+            shape=box
+        ];
+        BUS_L [
+            label="CANL 主干",
+            fillcolor="#ffe0b2",
+            shape=box
+        ];
+        TERM1 [
+            label="120Ω #1\n节点 1 模块自带\n跳线式需确认接通",
+            fillcolor="#fff9c4",
+            shape=box
+        ];
+        TERM2 [
+            label="120Ω #2\n节点 2 模块自带\n跳线式需确认接通",
+            fillcolor="#fff9c4",
+            shape=box
+        ];
+        METER [
+            label="万用表（断电测量）\n正常 CANH-CANL ≈ 60Ω\n30Ω = 多并了外接电阻\n40Ω = CANable 终接开关没关",
+            shape=note,
+            fillcolor="#fff9c4"
+        ];
+    }
+
+    subgraph cluster_relay {
+        label="故障注入（可选）：2 通道继电器模块（5V 光耦隔离）";
+        color="#c62828";
+        style="rounded,filled";
+        fillcolor="#ffebee";
+
+        RELAY [
+            label="CH1 常闭（NC）串 CANH：可模拟通信丢失\n实测拔掉 ACK 只能到 error-passive，TEC 可冻结在 128，不能据此宣称 Bus-Off\n\nCH2 常开（NO）跨接 CANH-CANL：本项目实测 Bus-Off 路径\n吸合后产生位错误，TEC 越过 128 并进入 Bus-Off",
+            fillcolor="#ffcdd2",
+            color="#c62828",
+            penwidth=2,
+            shape=box
+        ];
+        RELAY_CTRL [
+            label="控制侧独立 5V 电源\n手动按钮优先，别在带电时插拔控制线\nr11：约 2 秒短路，观察到 3 次 Bus-Off / 3 次恢复\nW2-10：20 ms 测试镜像持续约 8 秒，验证连续失败复位\n只在受控台架和测试镜像上执行，达到判据立即释放",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+        RELAY_NOTE [
+            label="继电器接线属于 Phase 4（物理故障注入）。\nCH1 断开不是本硬件的 Bus-Off 判据；\nCH2 短接 CANH-CANL 已在 r11 / W2-10 上板验证。\nPhase 3 的 listen-only 只证明错误中断通路，\n最终 Bus-Off 验收改用 CH2 物理注入。",
+            shape=note,
+            fillcolor="#fff3cd",
+            color="#ef6c00",
+            penwidth=2
+        ];
+    }
+
+    subgraph cluster_pc {
+        label="PC 侧：抓包与时间戳";
+        color="#00695c";
+        style="rounded,filled";
+        fillcolor="#e0f2f1";
+
+        CANABLE [
+            label="MKS CANable V2.0 Pro（USB-CAN）\nslcan: COMx @500k（pyserial）\ncandleLight: gs_usb index 0（pyusb）\n板载 120Ω 开关必须关闭（它挂在总线中间）",
+            fillcolor="#b2dfdb",
+            shape=box,
+            penwidth=2
+        ];
+        PC [
+            label="PC：python-can + diagnoser\ntrace 抓 0x123 时间戳\n最大同 ID 间隔 = 离线/恢复窗口",
+            fillcolor="#ffffff",
+            shape=box
+        ];
+    }
+
+    GND [
+        label="公共 GND\nF407 / F103 / 两个 SN65HVD230 / 继电器 5V 电源 / CANable 必须共地",
+        shape=box,
+        fillcolor="#eceff1",
+        color="#37474f",
+        penwidth=2
+    ];
+
+    /* MCU 与收发器 */
+    F407_MCU -> SN1 [label="PA12 → TXD"];
+    SN1 -> F407_MCU [label="RXD → PA11", style=dashed, constraint=false];
+    F407_STLINK -> F407_MCU [label="SWD 4 线", style=dotted, constraint=false];
+    F407_MCU -> F407_LED [label="收到 0x123 翻转", style=dotted, constraint=false];
+
+    F103_MCU -> SN2 [label="PA12 → TXD"];
+    SN2 -> F103_MCU [label="RXD → PA11", style=dashed, constraint=false];
+    F103_MCU -> F103_LED [label="收到 0x123 翻转", style=dotted, constraint=false];
+
+    /* 收发器到总线 */
+    SN1 -> BUS_H [label="CANH"];
+    SN1 -> BUS_L [label="CANL"];
+    SN2 -> RELAY [label="CANH 串入 CH1 常闭触点", color="#c62828"];
+    RELAY -> BUS_H [label="断线/恢复路径", color="#c62828"];
+    SN2 -> BUS_L [label="CANL"];
+    RELAY -> BUS_L [
+        label="CH2 短接（瞬时）",
+        style=dashed,
+        color="#d32f2f",
+        constraint=false
+    ];
+
+    /* 终端电阻 */
+    BUS_H -> TERM1 [dir=none];
+    TERM1 -> BUS_L [dir=none];
+    BUS_H -> TERM2 [dir=none];
+    TERM2 -> BUS_L [dir=none];
+    METER -> BUS_H [style=dotted, dir=none, constraint=false];
+    METER -> BUS_L [style=dotted, dir=none, constraint=false];
+
+    /* 继电器供电 */
+    RELAY_CTRL -> RELAY [label="CH1 / CH2 控制", style=dotted];
+
+    /* CANable 挂总线 */
+    CANABLE -> BUS_H [label="CANH", color="#00695c"];
+    CANABLE -> BUS_L [label="CANL", color="#00695c"];
+    PC -> CANABLE [label="USB", style=dashed];
+
+    /* 共地 */
+    F407_MCU -> GND [style=dotted, label="GND", constraint=false];
+    F103_MCU -> GND [style=dotted, label="GND", constraint=false];
+    SN1 -> GND [style=dotted, constraint=false];
+    SN2 -> GND [style=dotted, constraint=false];
+    RELAY_CTRL -> GND [style=dotted, constraint=false];
+    CANABLE -> GND [style=dotted, constraint=false];
+}

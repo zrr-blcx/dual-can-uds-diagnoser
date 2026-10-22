@@ -1,0 +1,48 @@
+digraph STLinkGroundingWiring {
+  // ST-Link 共地接线图（F407 / F103 两个场景）
+  rankdir=TB;
+  graph [bgcolor="white", fontname="Microsoft YaHei", label="ST-Link 共地接线图（SWD 接 F407 或 F103）", labelloc=t, fontsize=20, fontcolor="#1A1B1C", pad="0.3", nodesep="0.4", ranksep="0.6"];
+  node [fontname="Microsoft YaHei", style="rounded,filled", fontsize=12, color="#3B6EA5", fontcolor="#1A1B1C"];
+  edge [fontname="Microsoft YaHei", fontsize=10, color="#666666", arrowsize=0.7];
+
+  // ============ ST-Link（中心） ============
+  stlink [label="ST-Link V2\nSWDIO → PA13\nSWCLK → PA14\nGND（必须接）\n3.3V（可不接，板子自供电）", fillcolor="#EDE7F6", color="#6A4FA3", penwidth=2];
+
+  // ============ 场景 A：ST-Link → F407 ============
+  subgraph cluster_f407 {
+    label="场景 A：ST-Link 接 F407（探索者）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    f407 [label="STM32F407ZGT6\nPA13 = SWDIO\nPA14 = SWCLK\n板 GND 引脚", fillcolor="#FFFFFF"];
+    tr407 [label="SN65HVD230 #1\n3.3V 供电\nGND 引脚", fillcolor="#E8F1FB"];
+    gnd407 [label="GND 路径：\nST-Link GND → 板 GND →\n收发器 GND → 面包板蓝轨", shape=note, fillcolor="#FFF8DC", color="#B8860B", fontsize=11];
+  }
+  stlink -> f407 [label="SWD 4 线\n（含 GND）", color="#6A4FA3", style=dotted];
+  f407 -> tr407 [label="TXD -> TXD\nRXD <- RXD", color="#3B6EA5", style=dashed, constraint=false];
+  f407 -> gndrail [label="板 GND", color="#555555"];
+  tr407 -> gndrail [label="GND", color="#555555"];
+  gnd407 -> f407 [style=invis];
+
+  // ============ 场景 B：ST-Link → F103 ============
+  subgraph cluster_f103 {
+    label="场景 B：ST-Link 接 F103（江协板）";
+    style=filled; color="#6A1B9A"; fillcolor="#F3E5F5"; fontcolor="#1A1B1C";
+    f103 [label="STM32F103C8T6\nPA13 = SWDIO\nPA14 = SWCLK\n板 GND 引脚", fillcolor="#FFFFFF"];
+    tr103 [label="SN65HVD230 #2\n3.3V 供电\nGND 引脚", fillcolor="#E8F1FB"];
+    gnd103 [label="GND 路径：\nST-Link GND → 板 GND →\n收发器 GND → 面包板蓝轨", shape=note, fillcolor="#FFF8DC", color="#B8860B", fontsize=11];
+  }
+  stlink -> f103 [label="SWD 4 线\n（含 GND）", color="#6A4FA3", style=dotted];
+  f103 -> tr103 [label="TXD -> TXD\nRXD <- RXD", color="#6A1B9A", style=dashed, constraint=false];
+  f103 -> gndrail [label="板 GND", color="#555555"];
+  tr103 -> gndrail [label="GND", color="#555555"];
+  gnd103 -> f103 [style=invis];
+
+  // ============ 公共 GND 网络 ============
+  gndrail [label="公共 GND 网络\n（面包板蓝色负极轨，同一侧、任意孔）\nF407 板 / F103 板 / 两个收发器 / CANable / 继电器电源地\n全部汇入这里", shape=box, fillcolor="#E3E3E3", color="#37474F", penwidth=2, fontsize=12];
+
+  // ST-Link GND 也直达蓝轨（强调）
+  stlink -> gndrail [label="GND 汇入蓝轨", color="#6A4FA3", style=dotted, constraint=false];
+
+  // ============ 说明 ============
+  note [shape=note, fillcolor="#FFF8DC", color="#B8860B", fontsize=11,
+        label="要点：\n1. ST-Link 的 GND 必须接：不共地 SWD 通信不了\n2. 3.3V 可不接：板子自己供电即可（接了也没关系）\n3. GND 路径 = ST-Link GND → 板 GND → SN65HVD230 GND → 面包板蓝轨（全部连通）\n4. 同一侧蓝轨任意孔即可，别跨上下排（中间可能断口）\n5. 无论接 F407 还是 F103，GND 都汇入同一个公共 GND 网络"];
+}

@@ -90,13 +90,13 @@ digraph f407_f103_can_bus {
             fillcolor="#cfd8dc"
         ];
         TERM1 [
-            label="120Ω #1\nF407 物理端\n跨接 CANH-CANL",
+            label="120Ω #1\nF407 端 SN65HVD230 模块自带\n跨接 CANH-CANL，无需外接",
             fillcolor="#ffcdd2",
             color="#c62828",
             penwidth=3
         ];
         TERM2 [
-            label="120Ω #2\nF103 物理端\n跨接 CANH-CANL",
+            label="120Ω #2\nF103 端 SN65HVD230 模块自带\n跨接 CANH-CANL，无需外接",
             fillcolor="#ffcdd2",
             color="#c62828",
             penwidth=3
@@ -209,7 +209,7 @@ digraph f407_f103_can_bus {
             color="#2e7d32"
         ];
         NOTE_TERM [
-            label="总线断电测 CANH-CANL：\n两端各 120Ω 时约 60Ω。\n不要只在一个节点并联两个 120Ω。",
+            label="总线断电测 CANH-CANL：\n两个模块自带 120Ω 时约 60Ω；\n30Ω = 多并了外接电阻，\n40Ω = CANable 的 120Ω 没断开。",
             shape=note,
             fillcolor="#ffebee",
             color="#c62828",

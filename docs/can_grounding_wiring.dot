@@ -1,0 +1,66 @@
+digraph CANGrounding {
+  // CAN 系统完整接地（共地）接线图 — 第 2 周 Phase 0
+  rankdir=LR;
+  graph [bgcolor="white", fontname="Microsoft YaHei",
+         label="CAN 系统完整接地（共地）接线图", labelloc=t, fontsize=20,
+         fontcolor="#1A1B1C", pad="0.3"];
+  node [fontname="Microsoft YaHei", style="rounded,filled", fontsize=11,
+        color="#3B6EA5", fontcolor="#1A1B1C", margin="0.12,0.06"];
+  edge [fontname="Microsoft YaHei", fontsize=9, arrowsize=0.6];
+
+  // ============ 中央：面包板公共地 ============
+  GND_BUS [label="面包板蓝色 GND 轨\n（公共地母线）", shape=box,
+           fillcolor="#D9E8FF", color="#2E6DB4", penwidth=2.5, fontsize=13];
+
+  // ============ F407 节点组 ============
+  subgraph cluster_f407 {
+    label="节点 A：F407 探索者（正点原子）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    F407_GND  [label="F407 板 GND 引脚", fillcolor="#FFFFFF"];
+    TR407_GND [label="SN65HVD230(407)\n模块 GND", fillcolor="#FFFFFF"];
+    STLINK_GND [label="ST-Link GND（调试）", fillcolor="#F3E8FB", color="#8A4BB8"];
+    PWR407 [label="F407 电源\nUSB / 充电头", shape=component,
+            fillcolor="#FFF2D9", color="#C25E2E"];
+  }
+  F407_GND  -> GND_BUS   [label="新加线（现在接）", color="#2E9E4F", penwidth=2, style=bold];
+  TR407_GND -> F407_GND  [label="已有（必须）", color="#999999"];
+  STLINK_GND -> F407_GND [label="已有（调试共地）", color="#8A4BB8", style=dashed];
+  PWR407    -> F407_GND  [label="供电回路", color="#C25E2E", style=dotted];
+
+  // ============ F103 节点组 ============
+  subgraph cluster_f103 {
+    label="节点 B：F103 江协板（STM32F103C8T6）";
+    style=filled; color="#3B6EA5"; fillcolor="#EEF4FB"; fontcolor="#1A1B1C";
+    F103_GND  [label="F103 板 GND 引脚", fillcolor="#FFFFFF"];
+    TR103_GND [label="SN65HVD230(103)\n模块 GND", fillcolor="#FFFFFF"];
+    PWR103 [label="F103 电源\nUSB / 充电头", shape=component,
+            fillcolor="#FFF2D9", color="#C25E2E"];
+  }
+  F103_GND  -> GND_BUS   [label="新加线（现在接）", color="#2E9E4F", penwidth=2, style=bold];
+  TR103_GND -> F103_GND  [label="已有（必须）", color="#999999"];
+  PWR103    -> F103_GND  [label="供电回路", color="#C25E2E", style=dotted];
+
+  // ============ CANable + PC ============
+  subgraph cluster_canable {
+    label="诊断仪";
+    style=filled; color="#6B7280"; fillcolor="#F3F3F2"; fontcolor="#1A1B1C";
+    CANABLE_GND [label="CANable GND", fillcolor="#FFFFFF"];
+    PC [label="PC（CANable COMx）\npython-can 4.6.1", fillcolor="#FFFFFF"];
+  }
+  CANABLE_GND -> GND_BUS [label="新加线（现在接）", color="#2E9E4F", penwidth=2, style=bold];
+  CANABLE_GND -> PC      [label="USB（内含地，PC 间接共地）", color="#6B7280"];
+
+  // ============ ST-Link 3.3V 提示 ============
+  STLINK_33 [label="ST-Link 3.3V\n不接！（避免双电源冲突）", shape=note,
+             fillcolor="#FFF8DC", color="#B8860B", style=dashed];
+  STLINK_33 -> STLINK_GND [label="", color="#B8860B", style=dotted];
+
+  // ============ 图例 ============
+  legend [shape=plaintext, label=<<table border="0" cellborder="0" cellspacing="4" cellpadding="3">
+    <tr><td align="left" colspan="2"><b>图例</b></td></tr>
+    <tr><td bgcolor="#2E9E4F" width="26"></td><td align="left">现在要补的线（新加）</td></tr>
+    <tr><td bgcolor="#999999"></td><td align="left">已有接线（第 1 周已通）</td></tr>
+    <tr><td bgcolor="#8A4BB8"></td><td align="left">调试共地（ST-Link）</td></tr>
+    <tr><td bgcolor="#C25E2E"></td><td align="left">供电回路</td></tr>
+  </table>>];
+}

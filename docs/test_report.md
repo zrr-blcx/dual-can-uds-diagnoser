@@ -7,10 +7,10 @@
 
 | Item | Value |
 | --- | --- |
-| Date | - |
-| Tester | - |
-| Firmware version | - |
-| Diagnostic tool version | - |
+| Date | 2026-10-22 |
+| Tester | Local bench run |
+| Firmware version | Week 2 formal build, 500 ms cyclic frame |
+| Diagnostic tool version | 1.0.0 |
 | CAN bitrate | 500 kbps |
 | Transceivers | SN65HVD230 x2 |
 | USB-CAN | CANable slcan |
@@ -64,10 +64,15 @@
 
 | Test | Expected | Result |
 | --- | --- | --- |
-| Trigger Bus-Off with relay | Node enters Bus-Off | Target |
-| Software reinit via HAL_CAN_Start | Node returns to normal mode | Target |
-| Recovery time | Measured in ms | Target |
-| Recover 3 times consecutively | Stable | Target |
+| Trigger Bus-Off with relay | Node enters Bus-Off | PASS, CH2 shorted CANH-CANL; `BOFF=1` observed |
+| Software reinit via HAL_CAN_Start | Node returns to normal mode | PASS, 3/3 recovery successes |
+| Recovery time | Measured in ms | PASS, 3025-4543 ms per Bus-Off episode |
+| Recover 3 times consecutively | Stable | PASS, 3 automatic events in one 2 s injection |
+| Keep fault until 3 recovery failures | Software reset on third failure | PASS, `SFTRSTF=1`, `IWDGRSTF=0` |
+
+The three hardware recovery events occurred during one approximately 2-second
+fault injection. This satisfies the automatic 3/3 recovery criterion, but it is
+not the same as three independent manual injection rounds.
 
 ## Virtual Bus-Off Validation
 
@@ -92,6 +97,7 @@ STM32 validation remains Target.
 | 2026-09-27 | 3.12.13 (`.venv`) | `python -m pytest` | `39 passed`, 1 cache-permission warning |
 | 2026-10-04 | 3.12.13 (`.venv`) | `python -m pytest` | `48 passed`, 1 cache-permission warning |
 | 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
+| 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
 
 The `py` launcher was unavailable in the current Windows shell, so the project
 virtual environment was used for the complete regression. The warning came from
@@ -119,6 +125,8 @@ output, and `udsoncan` interoperability.
 | 2026-09-27 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 9104 B |
 | 2026-10-04 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, text 12808 B |
 | 2026-10-04 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 11304 B |
+| 2026-10-22 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, final r22 text 15828 B, bss 3452 B |
+| 2026-10-22 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, final r22 text 14304 B, bss 3452 B |
 
 The F103 image was programmed, verified, and reset through ST-Link. The F407
 image was also programmed successfully after reconnecting its SWD target.
@@ -201,6 +209,45 @@ changed in Week 6, so the 2026-10-04 firmware build sizes still apply.
 Real CANable capture, F407/F103 physical addressing, and hardware timing
 measurements remain Target until the ISO-TP firmware path is available.
 
+## Week 2 Bus-Off Hardware Validation
+
+Measured on 2026-10-22 at 500 kbps. F407 initially ran the 20 ms fast-frame
+test image and F103 ran the normal 500 ms image. Relay channel CH2 was wired
+COM-NO across CANH and CANL; IN2 was pulled to GND for approximately 2 seconds.
+Health data was read through ST-Link in `hotplug` mode so that connecting the
+probe did not reset the target.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Physical CAN fault enters Bus-Off | `BOFF=1` and TEC crosses 128 | PASS, TEC reached at least 168; `BOFF=1` captured |
+| Automatic recovery | Return to `error-active` | PASS, 3/3 events |
+| Recovery time | Measured in ms | PASS, 3025-4543 ms per event; approximately 1507 ms per attempt |
+| Recovery failure escalation | Reset only after 3 recovery-chain failures | PASS, `RCC_CSR` changed from `SFTRSTF=0` to `SFTRSTF=1`; `IWDGRSTF=0` |
+| Final bus state | No permanent Bus-Off | PASS, both nodes final `TEC/REC=0/0`, `BOFF=0` |
+
+Raw evidence is retained locally because it contains diagnostic buffers and
+local hardware details. The publishable result is the table above and the
+decoded conclusion, not the raw binary logs.
+
+For the sustained-fault reset test, the F407 baseline was
+`RCC_CSR=0x0E000002` with `SFTRSTF=0` and `IWDGRSTF=0`. After holding CH2
+shorted for approximately 8 seconds, the register became `0x1E000002` with
+`SFTRSTF=1` and `IWDGRSTF=0`.
+
+Final formal-firmware regression after restoring both nodes:
+
+| Metric | Result |
+| --- | --- |
+| Capture | 39 frames / 10 s |
+| Average same-ID interval | 253.0 ms |
+| Maximum same-ID interval | 261.9 ms |
+| F407 health | error-active, TEC/REC=0/0, Bus-Off=0 |
+| F103 health | error-active, TEC/REC=0/0, Bus-Off=0 |
+
+The exported health snapshot now synchronizes TEC/REC/BOFF from the controller
+ESR on every refresh. Before that fix the hardware ESR was already zero while
+the RAM snapshot retained the previous error-passive value.
+
 ## Week 1 CAN Baseline
 
 Measured on 2026-09-20 with both programmed nodes connected to the same
@@ -235,4 +282,5 @@ The Week 1 hardware and CAN baseline milestone is complete.
 
 - Physical frame loss below 0.1% at normal load: Target.
 - UDS timeout handling verified: Target.
-- Bus-Off recovery conforms to ISO 11898: Target.
+- Bus-Off physical detection, automatic recovery, and sustained-fault software
+  reset escalation: PASS.

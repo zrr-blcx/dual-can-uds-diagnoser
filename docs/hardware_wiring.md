@@ -11,7 +11,7 @@
 | Fault relay | 2-channel 5V opto-isolated | 1 |
 | USB-TTL | CH340 | 1 |
 | Multimeter | Any | 1 |
-| Termination | 120 ohm 0.25W | 2 |
+| Termination | SN65HVD230 modules carry 120 ohm onboard | 0 extra |
 | Power | 5V for relay and modules | 1 |
 
 ## MCU CAN Pins
@@ -41,9 +41,20 @@ before connecting an external module.
 
 ## Bus Termination
 
-- Place one 120 ohm resistor at each physical end of the bus.
-- Disable onboard termination if the board has a solder bridge/jumper.
-- Measure CANH to CANL with power off: approximately 60 ohm.
+- Both SN65HVD230 modules in this project carry a 120 ohm termination across
+  CANH/CANL (some boards route it through a jumper or solder bridge). With one
+  module at each physical end of the bus, those two onboard resistors already
+  give the required 60 ohm: do **not** add external 120 ohm resistors on top.
+- Check each module on its own, unplugged from the bus and with power off:
+  120 ohm means its onboard termination is connected, an open reading means it
+  is not (bridge/jumper the module if so).
+- Keep the CANable's switchable 120 ohm termination **off** (the onboard
+  switch). In this topology the CANable taps the middle of the bus, so a third
+  120 ohm would drop the bus to about 40 ohm. Use the switch as a quick check:
+  toggling it must move the reading between 60 ohm and 40 ohm.
+- Measure CANH to CANL with power off and everything connected: approximately
+  60 ohm. 30 ohm means two extra resistors are paralleled in; 40 ohm means
+  three terminations are present.
 
 ## Power and Grounding
 
@@ -55,7 +66,32 @@ before connecting an external module.
 
 ## Fault Injection Wiring
 
-- Communication loss: relay in series with CANH or CANL, open the relay.
-- Bus-Off injection: short CANH and CANL briefly through the relay, then release.
-  Do not keep the bus shorted for a long time.
+- Communication loss: CH1 normally-closed contact in series with CANH; opening
+  it simulates loss of communication. On this hardware it only reached
+  error-passive and is not a valid Bus-Off trigger.
+- Bus-Off injection: use CH2 normally-open contact across CANH and CANL.
+  The validated r11 run used approximately 2 seconds and observed three
+  Bus-Off/recovery events. W2-10 used the 20 ms test image for approximately
+  8 seconds to verify the three-failure reset branch. Use only a controlled
+  bench setup and release the relay immediately after the acceptance event.
 - DTC and NRC injection: implemented in software, no extra wiring required.
+- **Bench status (2026-10-22): the relay is wired and the CH2 path is verified.**
+  Phase 2/3 did not require the relay. A listen-only CANable experiment was
+  retained as a diagnostic step, but it did not reach Bus-Off because TEC froze
+  at 128. Final acceptance therefore uses the physical CH2 short.
+- Full Week 2 test topology (relay, termination, CANable tap, ST-Link):
+  `docs/diagrams/week2_bus_off_injection_wiring.svg`
+  (source: `week2_bus_off_injection_wiring.dot`).
+
+## Debug, Flashing and Bus-Off Isolation (Week 2 Phase 3)
+
+- ST-Link connects to the target SWD header (3.3V / GND / PA13 SWDIO / PA14
+  SWCLK). Both probes may remain connected; select the intended one with its
+  probe serial number and flash with
+  `STM32_Programmer_CLI -c port=SWD sn=<serial> -w <hex> -v -rst`.
+- A listen-only CANable can remove ACK for diagnostics, but on this hardware it
+  only produced ACK errors and error-passive operation. It is not the final
+  Bus-Off injection method.
+- Health snapshot read-out: `STM32_Programmer_CLI -c port=SWD -u <address> 4 file.bin`.
+- Wiring and step order: `docs/diagrams/week2_stlink_debug_isolate_wiring.svg`
+  (source: `week2_stlink_debug_isolate_wiring.dot`).
