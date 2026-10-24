@@ -87,7 +87,7 @@ Measured on 2026-09-13 with `python-can` MemoryBus and VirtualEcu:
 
 The observed interval includes CLI polling latency and is not a hardware
 acceptance measurement. See `docs/bus_off_recovery_report.md`. Real relay and
-STM32 validation remains Target.
+STM32 validation was completed later in the Week 2 hardware section below.
 
 ## Automated Regression
 
@@ -98,6 +98,7 @@ STM32 validation remains Target.
 | 2026-10-04 | 3.12.13 (`.venv`) | `python -m pytest` | `48 passed`, 1 cache-permission warning |
 | 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
 | 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
+| 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `86 passed` |
 
 The `py` launcher was unavailable in the current Windows shell, so the project
 virtual environment was used for the complete regression. The warning came from
@@ -184,8 +185,9 @@ Run the workflow directly:
 ```
 
 The C host test also confirms that the full service layer compiles into both
-STM32 targets. Real CANable capture and F407/F103 hardware acceptance remain
-Target because the ISO-TP firmware path is still pending.
+STM32 targets. At the time of Week 5 testing, real CANable capture and hardware
+acceptance were Target because ISO-TP was pending. The Week 3 hardware section
+below records the later closure.
 
 ## Week 6 Diagnostic Tool V1.0 Alpha Validation
 
@@ -206,8 +208,9 @@ changed in Week 6, so the 2026-10-04 firmware build sizes still apply.
 | Dual-node virtual full flow | `ecu1` and `ecu2` `uds-week5` PASS | PASS |
 | CLI JSON smoke | `--json read-did` and negative response | PASS |
 
-Real CANable capture, F407/F103 physical addressing, and hardware timing
-measurements remain Target until the ISO-TP firmware path is available.
+At the time of Week 6 Alpha testing, real CANable capture and hardware timing
+were Target until the ISO-TP firmware path was available. The later dual-node
+hardware section below records physical addressing and timing results.
 
 ## Week 2 Bus-Off Hardware Validation
 
@@ -304,9 +307,70 @@ deliverables were closed.
 
 The Week 1 hardware and CAN baseline milestone is complete.
 
+## Week 3 ISO-TP Validation
+
+Measured on 2026-10-24 by compiling the portable C ISO-TP core
+(`firmware/common/isotp.c`) plus the host test drivers with MSVC, executing them,
+and running bidirectional F407/F103 100-byte transfers plus CANable capture.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Single frame (SF) round trip | 3-byte payload preserved | PASS |
+| Multi-frame 100 B, BS=8, STmin=20 ms | FF + 14 CF reassembled intact | PASS |
+| SN wraparound 120 B | 17 CF, SN hits `0x0F` then `0x00` | PASS |
+| FC direction | Request `0x7E0` -> FC emitted on response `0x7E8` | PASS |
+| Frame dispatch | FC resumes the sender; SF/FF/CF reach the receiver | PASS |
+| N_BS timeout | No FC arrives -> `ISOTP_ERR_TIMEOUT` | PASS |
+| N_AS timeout | CAN frame never completes transmission -> `ISOTP_ERR_TIMEOUT` | PASS |
+| N_CR timeout | Next block FC / next CF never arrives -> `ISOTP_ERR_TIMEOUT` | PASS |
+| N_AR timeout | FC never completes transmission -> `ISOTP_ERR_TIMEOUT` | PASS |
+| SN out of order | Wrong CF index -> `ISOTP_ERR_INVALID` | PASS |
+| Buffer overflow | Declared length > buffer -> `ISOTP_ERR_OVERFLOW` | PASS |
+| FC WAIT | Sender keeps waiting, refreshed deadline | PASS |
+| FC OVERFLOW | Sender aborts the transfer | PASS |
+| STmin spacing | CFs spaced by the peer's STmin, including across BS blocks | PASS |
+| Bench payload | Fixed 100-byte sender pattern and receiver validation | PASS |
+| Trace summary | 14 CF, 2 FC, BS/STmin and reassembled payload extracted | PASS |
+
+The Python reference transport also gained full BS/STmin flow control
+(per-block FC waits on send; block advertisement on receive). The tests verify
+send waits at each BS boundary, receive advertises two blocks for 100 B,
+OVERFLOW aborts, WAIT is handled before CTS, and WAIT refreshes the FC deadline.
+
+Firmware builds now include the ISO-TP core on both targets:
+
+| Date | Target | Toolchain | Artifact | Result |
+| --- | --- | --- | --- | --- |
+| 2026-10-24 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, text 25356 B, bss 8292 B |
+| 2026-10-24 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 23800 B, bss 8292 B |
+
+Both `main.c` files route `0x7E0/0x7E8` (F407) and `0x7E1/0x7E9` (F103) request
+frames into the ISO-TP receiver, feed complete requests to the UDS server, and
+send responses back out through the ISO-TP sender. Compile-time bench modes
+(`-IsotpBenchTx` / `-IsotpBenchRx`) exchange the fixed 100-byte payload without
+using the UDS parser.
+
+### Dual-Node Hardware Result
+
+| Test | Result |
+| --- | --- |
+| F407 -> F103, 100-byte payload | PASS, 14 CF, 2 FC, 5 x status `0x5A` |
+| F407 -> F103 CF gap | Minimum `21.811 ms` |
+| F407 -> F103 receiver counters | `rx_messages=19`, `rx_errors=0` |
+| F103 -> F407, 100-byte payload | PASS, 14 CF, 2 FC, 5 x status `0x5A` |
+| F103 -> F407 CF gap | Minimum `21.845 ms` |
+| F103 -> F407 receiver counters | `rx_messages=28`, `rx_errors=0` |
+| FC settings in both directions | BS=8, STmin=20 ms |
+| F407 formal `10 03` / `22 F190` | PASS, `2.9 ms` / `27.3 ms` |
+| F103 formal `10 03` / `22 F190` | PASS, `8.8 ms` / `26.1 ms` |
+
+Both bench images and then both formal images were flashed and verified with
+STM32CubeProgrammer. The formal images were restored after the test.
+
 ## Conclusion
 
 - Physical frame loss below 0.1% at normal load: Target.
+- Week 3 ISO-TP bidirectional 100-byte transfer: PASS.
 - UDS timeout handling verified: Target.
 - Bus-Off physical detection, automatic recovery, and sustained-fault software
   reset escalation: PASS.

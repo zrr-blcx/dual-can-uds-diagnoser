@@ -141,6 +141,18 @@ HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
   return HAL_CAN_AddTxMessage(driver->handle, &tx_header, payload, &mailbox);
 }
 
+bool CanDriver_IsTxPending(const CanDriver_t *driver)
+{
+  if ((driver == NULL) || (driver->handle == NULL))
+  {
+    return false;
+  }
+
+  return HAL_CAN_IsTxMessagePending(
+             driver->handle,
+             CAN_TX_MAILBOX0 | CAN_TX_MAILBOX1 | CAN_TX_MAILBOX2) != 0U;
+}
+
 void CanDriver_RxIrqHandler(CanDriver_t *driver)
 {
   CAN_RxHeaderTypeDef rx_header = {0};

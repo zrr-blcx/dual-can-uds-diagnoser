@@ -1,5 +1,7 @@
 ﻿param(
     [switch]$FastTxTest,
+    [switch]$IsotpBenchTx,
+    [switch]$IsotpBenchRx,
     [switch]$WwdgSelfTest,
     [switch]$WwdgEarlyFeedTest
 )
@@ -63,6 +65,17 @@ if ($FastTxTest) {
 if ($WwdgSelfTest -and $WwdgEarlyFeedTest) {
     throw 'Choose either -WwdgSelfTest or -WwdgEarlyFeedTest, not both.'
 }
+if ($IsotpBenchTx -and $IsotpBenchRx) {
+    throw 'Choose either -IsotpBenchTx or -IsotpBenchRx, not both.'
+}
+if ($IsotpBenchTx) {
+    $commonFlags += '-DAPP_ISOTP_BENCH_TX=1U'
+    Write-Host 'ISO-TP BENCH: 100-byte sender'
+}
+if ($IsotpBenchRx) {
+    $commonFlags += '-DAPP_ISOTP_BENCH_RX=1U'
+    Write-Host 'ISO-TP BENCH: 100-byte receiver'
+}
 if ($WwdgSelfTest) {
     $commonFlags += '-DAPP_WWDG_SELFTEST=1U'
     Write-Host 'WWDG SELF TEST: stop refreshing WWDG'
@@ -77,6 +90,10 @@ $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filt
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Src') -Filter '*.c' -File
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_health.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp.c')
+if ($IsotpBenchTx -or $IsotpBenchRx) {
+    $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp_bench.c')
+}
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\watchdog.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')

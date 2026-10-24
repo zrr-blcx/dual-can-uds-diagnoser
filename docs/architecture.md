@@ -19,8 +19,8 @@ STM32 ECU
 ==================
 Application layer
 UDS service layer      firmware/common/uds_server.c (Week 5 service v1.0)
-ISO 15765-2 TP layer
-CAN driver layer
+ISO 15765-2 TP layer   firmware/common/isotp.c (SF/FF/CF/FC + timers)
+CAN driver layer       firmware/common/can_driver.c
 STM32 HAL
 ```
 
@@ -41,6 +41,10 @@ STM32 HAL
 - Consecutive frame: PCI type 2, sequence number modulo 16.
 - Flow control: PCI type 3, CTS/Wait/Overflow, BS and STmin.
 - Default flow control: BS=8, STmin=20ms for firmware bring-up.
+- The C core routes FC to the active sender and SF/FF/CF to the receiver.
+- FC frames are transmitted on the endpoint's response ID.
+- `N_As` and `N_Ar` use CAN transmit-mailbox completion; `N_Bs` and `N_Cr`
+  cover the FC/CF wait windows.
 - Stress test can lower STmin to 1-5ms after stability is proven.
 
 ## UDS Services
@@ -72,8 +76,10 @@ dispatch, `0x10`, `0x22`, `0x27`, `0x2E`, `0x31`, `0x3E`, S3 timeout, DID
 lookup, security state, routine state, and negative responses.
 `firmware/common/uds_did_db.c` provides the F407/F103 DID differences, and
 `firmware/common/uds_ecu.c` wires the DID database and reference routines into
-both applications. The layer is host-tested and compiled for both STM32
-targets. Hardware integration still depends on the ISO-TP layer.
+both applications. The portable ISO-TP core now feeds reassembled requests to
+this layer and transmits its responses. F103 single-frame and 20-byte
+multi-frame UDS paths have passed on hardware; F407/F103 node-to-node ISO-TP
+acceptance remains Target.
 
 ## Scheduling and Fault Injection
 

@@ -53,6 +53,17 @@
 - Add hardware-validated CAN health snapshots and SCE error handling to both
   STM32 nodes, including IWDG supervision and a two-phase Bus-Off recovery
   state machine.
+- Add the portable firmware ISO-TP core with SF/FF/CF/FC sender/receiver state
+  machines, response-ID flow control, BS/STmin handling, and
+  transmit-completion-aware `N_As/N_Ar` plus `N_Bs/N_Cr` timeouts.
+- Add shared ISO-TP configuration and frame-routing helpers, plus host tests for
+  FC direction/dispatch, timeout windows, sequence wrap, and 100-byte payloads.
+- Add compile-time `-IsotpBenchTx`/`-IsotpBenchRx` firmware modes and a fixed
+  100-byte payload for hardware acceptance.
+- Add ISO-TP trace summarization and correct the Python FC.WAIT deadline.
+- Verify bidirectional F407/F103 100-byte transfers at BS=8 and STmin=20 ms,
+  including cross-block STmin spacing, then restore and regress both formal
+  images with single-frame and multi-frame UDS.
 - Validate a physical CANH-CANL fault: 3 Bus-Off events and 3/3 automatic
   recoveries, with no recovery-chain reset request.
 - Verify the sustained-fault escalation path: three consecutive recovery

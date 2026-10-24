@@ -21,6 +21,10 @@
   hardware-synchronized health snapshots, 3/3 automatic recovery events,
   verified software-reset escalation after three recovery failures, and a
   register-level WWDG with stop-refresh and early-refresh self-tests.
+- Week 3 ISO-TP: portable SF/FF/CF/FC state machines, BS/STmin flow control,
+  transmit-completion-aware timeouts, UDS request/response routing, and
+  100-byte bench modes. Bidirectional F407/F103 hardware transfer passed with
+  BS=8, STmin=20 ms, 14 CF, 2 FC, and zero receiver validation errors.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
@@ -100,6 +104,9 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 
 诊断仪 Alpha 说明、命令列表与输出格式见
 [docs/diagnoser_v1_alpha.md](docs/diagnoser_v1_alpha.md)。
+
+第 3 周 ISO-TP 设计、测试和当前硬件结论见
+[docs/isotp_week3.md](docs/isotp_week3.md)。
 
 通用开发环境：
 

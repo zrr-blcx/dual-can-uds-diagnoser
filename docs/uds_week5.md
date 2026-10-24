@@ -13,8 +13,10 @@ F407/F103 两套工程中启用同一服务层与差异化 DID 数据库。Pytho
   `uds_did_db.c`、`uds_ecu.c`，应用循环调用 `UdsEcu_Tick`。
 - 双节点联调：使用 MemoryBus + 两个 VirtualEcu 完成
   `10 03 -> 27 01 -> 27 02 -> 2E -> 31` 全流程。
-- 未完成：真实 F407/F103 的 ISO-TP 收发路径、CANable 抓包和实机双节点
-  验收。因此 `docs/ROADMAP.md` 第 5 周状态保持 Target。
+- ISO-TP 路径已完成双向 100 字节验收；F407/F103 的 `10 03` 和
+  `22 F190` 已通过实机回归。
+- 未完成：完整 `27/2E/31` 链路、真实 Flash 擦除和实机 NRC 时序记录。
+  因此 `docs/ROADMAP.md` 第 5 周状态保持 Target。
 
 ## 0x27 安全访问
 
@@ -121,5 +123,5 @@ Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调�
       -> 31 01 FF 00 -> 31 03 FF 00
 ```
 
-未完成项保留在第五周目标中：真实 ISO-TP 固件路径、CANable 双节点实测、
-真实 Flash 擦除和实机 NRC 时序记录。
+未完成项保留在第五周目标中：完整 `27/2E/31` 双节点实测、真实 Flash
+擦除和实机 NRC 时序记录。

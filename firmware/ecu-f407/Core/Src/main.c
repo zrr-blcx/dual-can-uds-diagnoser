@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include "can_driver.h"
 #include "can_health.h"
+#include "isotp.h"
+#include "isotp_bench.h"
 #include "uds_ecu.h"
 #include "watchdog.h"
 
@@ -36,6 +38,28 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define APP_CAN_ID               0x123U
+/* ISO-TP diagnostic addresses for this node (UDS server role). The tester
+   sends requests to APP_ISOTP_RX_ID and this node answers on APP_ISOTP_TX_ID. */
+#ifndef APP_ISOTP_BENCH_TX
+#define APP_ISOTP_BENCH_TX       0U
+#endif
+#ifndef APP_ISOTP_BENCH_RX
+#define APP_ISOTP_BENCH_RX       0U
+#endif
+#if APP_ISOTP_BENCH_TX && APP_ISOTP_BENCH_RX
+#error "Select either ISO-TP bench TX or RX, not both"
+#endif
+
+#if APP_ISOTP_BENCH_TX
+#define APP_ISOTP_RX_ID          0x7E9U
+#define APP_ISOTP_TX_ID          0x7E1U
+#else
+#define APP_ISOTP_RX_ID          0x7E0U
+#define APP_ISOTP_TX_ID          0x7E8U
+#endif
+#define APP_ISOTP_TX_BUFFER_SIZE 300U
+#define APP_ISOTP_RX_BUFFER_SIZE 300U
+#define APP_ISOTP_BENCH_PERIOD_MS 1000U
 /* Bring-up switch: 20 ms cyclic frames so a bus short reaches Bus-Off in under
    a second (32 failures) instead of ~9 s at the normal 500 ms period.
    The shipped value is 0. */
@@ -102,6 +126,31 @@ volatile uint32_t g_can_rx_count = 0U;
 static UdsEcu_t g_uds;
 static CanHealth_t g_can_health;
 
+/* ISO-TP transport endpoints. The node is a UDS server: it receives a request
+   on APP_ISOTP_RX_ID, feeds it to the UDS server, and sends the response out
+   on APP_ISOTP_TX_ID via the TP sender. */
+#if !APP_ISOTP_BENCH_RX
+static uint8_t g_isotp_tx_buffer[APP_ISOTP_TX_BUFFER_SIZE];
+#endif
+static uint8_t g_isotp_rx_buffer[APP_ISOTP_RX_BUFFER_SIZE];
+static IsotpRx_t g_isotp_rx;
+static IsotpTx_t g_isotp_tx;
+#if !APP_ISOTP_BENCH_TX && !APP_ISOTP_BENCH_RX
+static bool g_isotp_serving = false;
+#endif
+
+#if APP_ISOTP_BENCH_TX || APP_ISOTP_BENCH_RX
+volatile uint32_t g_isotp_bench_tx_started;
+volatile uint32_t g_isotp_bench_rx_messages;
+volatile uint32_t g_isotp_bench_rx_errors;
+volatile uint16_t g_isotp_bench_rx_bad_index;
+#if APP_ISOTP_BENCH_TX
+volatile uint8_t g_isotp_bench_last_ack;
+static bool g_isotp_bench_payload_ready;
+static uint32_t g_isotp_bench_last_tx_ms;
+#endif
+#endif
+
 /* Readable over ST-Link: full counters plus the 4-byte summary reserved for the
    0xF192 diagnostic DID (state / bus-off events / recovery successes /
    consecutive recovery failures). */
@@ -134,6 +183,13 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void APP_CAN_Send(uint8_t value);
 static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len);
+static void APP_ServiceIsotp(uint32_t now);
+static bool APP_IsotpSend(void *ctx, uint32_t txid, const uint8_t data[8U]);
+static bool APP_IsotpTxPending(void *ctx);
+static uint32_t APP_IsotpTick(void *ctx);
+#if APP_ISOTP_BENCH_TX || APP_ISOTP_BENCH_RX
+static void APP_ServiceIsotpBench(uint32_t now);
+#endif
 /* USER CODE BEGIN PFP */
 static void APP_ServiceCanHealth(uint32_t now);
 static void APP_UpdateHealthSummary(void);
@@ -193,6 +249,24 @@ int main(void)
 
   UdsEcu_Init(&g_uds, UDS_ECU_F407);
 
+  /* ISO-TP transport endpoints bound to the CAN driver. */
+  {
+    IsotpChannel_t isotp_channel = {0};
+    IsotpConfig_t isotp_cfg;
+
+    isotp_channel.send = APP_IsotpSend;
+    isotp_channel.receive = NULL;
+    isotp_channel.tick_ms = APP_IsotpTick;
+    isotp_channel.tx_pending = APP_IsotpTxPending;
+    isotp_channel.ctx = NULL;
+
+    IsotpConfig_Init(&isotp_cfg, APP_ISOTP_TX_ID, APP_ISOTP_RX_ID,
+                     g_isotp_rx_buffer, sizeof(g_isotp_rx_buffer));
+
+    IsotpTx_Init(&g_isotp_tx, &isotp_channel, &isotp_cfg);
+    IsotpRx_Init(&g_isotp_rx, &isotp_channel, &isotp_cfg);
+  }
+
   /* Starts the IWDG: a stalled loop now resets the MCU. When debugging, add
      __HAL_DBGMCU_FREEZE_IWDG() or breakpoints will reset the target. */
   if (!Watchdog_Init(WATCHDOG_DEFAULT_TIMEOUT_MS))
@@ -219,6 +293,7 @@ int main(void)
     uint32_t now = HAL_GetTick();
 
     UdsEcu_Tick(&g_uds, now);
+    APP_ServiceIsotp(now);
 
     if ((now - last_tx_tick) >= APP_CAN_TX_PERIOD_MS)
     {
@@ -354,13 +429,163 @@ static void APP_CAN_Send(uint8_t value)
   */
 static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len)
 {
-  if ((id == APP_CAN_ID) && (len >= 1U))
+  if (id == APP_CAN_ID && len >= 1U)
   {
     g_can_rx_count++;
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9,
                       (data[0] & 0x01U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   }
+  else if (id == APP_ISOTP_RX_ID && len == 8U)
+  {
+    (void)Isotp_RouteFrame(&g_isotp_tx, &g_isotp_rx, data);
+  }
 }
+
+/**
+  * @brief Send a raw ISO-TP frame through the CAN driver.
+  * @param ctx Unused.
+  * @param txid Arbitration id.
+  * @param data 8-byte frame payload.
+  * @retval true on successful enqueue.
+  */
+static bool APP_IsotpSend(void *ctx, uint32_t txid, const uint8_t data[8U])
+{
+  (void)ctx;
+  return CanDriver_SendStd(&g_can, txid, data, 8U) == HAL_OK;
+}
+
+static bool APP_IsotpTxPending(void *ctx)
+{
+  (void)ctx;
+  return CanDriver_IsTxPending(&g_can);
+}
+
+/**
+  * @brief Provide the monotonic tick (ms) for ISO-TP timeouts.
+  * @param ctx Unused.
+  * @retval HAL tick in milliseconds.
+  */
+static uint32_t APP_IsotpTick(void *ctx)
+{
+  (void)ctx;
+  return HAL_GetTick();
+}
+
+/**
+  * @brief Service the ISO-TP endpoints in the main loop.
+  *
+  * Drives the sender state machine, runs the receiver timeout, and when a
+  * complete request has arrived, hands it to the UDS server and starts sending
+  * the response. Runs with the 10 ms main-loop cadence, which is well within
+  * the N_Ar/N_Cr budgets.
+  * @param now Monotonic tick in milliseconds.
+  * @retval None
+  */
+static void APP_ServiceIsotp(uint32_t now)
+{
+#if APP_ISOTP_BENCH_TX || APP_ISOTP_BENCH_RX
+  (void)IsotpTx_Poll(&g_isotp_tx);
+  (void)IsotpRx_Poll(&g_isotp_rx);
+  APP_ServiceIsotpBench(now);
+#else
+  uint16_t response_length = 0U;
+
+  /* Sender: drive multi-frame response transmission. */
+  (void)IsotpTx_Poll(&g_isotp_tx);
+
+  /* Receiver: report a timeout if the peer stalled mid-transfer. */
+  (void)IsotpRx_Poll(&g_isotp_rx);
+
+  /* A complete request is buffered: serve it and send the response. */
+  if (IsotpRx_MessageReady(&g_isotp_rx) && !g_isotp_serving)
+  {
+    uint8_t request[APP_ISOTP_RX_BUFFER_SIZE];
+    uint16_t request_length = 0U;
+    UdsProcessResult_t result;
+
+    if (IsotpRx_Read(&g_isotp_rx, request, sizeof(request), &request_length) == ISOTP_OK)
+    {
+      result = UdsEcu_Process(&g_uds, now, request, request_length,
+                              g_isotp_tx_buffer, sizeof(g_isotp_tx_buffer),
+                              &response_length);
+      if (result == UDS_PROCESS_RESPONSE && response_length > 0U)
+      {
+        if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer, response_length) == ISOTP_OK)
+        {
+          g_isotp_serving = true;
+        }
+      }
+    }
+  }
+
+  /* The response transfer finished; free the endpoint for the next request. */
+  if (g_isotp_serving && !IsotpTx_IsBusy(&g_isotp_tx))
+  {
+    g_isotp_serving = false;
+  }
+#endif
+}
+
+#if APP_ISOTP_BENCH_TX || APP_ISOTP_BENCH_RX
+static void APP_ServiceIsotpBench(uint32_t now)
+{
+  if (IsotpRx_MessageReady(&g_isotp_rx))
+  {
+    uint8_t message[APP_ISOTP_RX_BUFFER_SIZE];
+    uint16_t message_length = 0U;
+
+    if (IsotpRx_Read(&g_isotp_rx, message, sizeof(message), &message_length) == ISOTP_OK)
+    {
+#if APP_ISOTP_BENCH_RX
+      uint16_t bad_index = 0xFFFFU;
+      uint8_t status = ISOTP_BENCH_STATUS_FAIL;
+      g_isotp_bench_rx_messages++;
+      if (IsotpBench_ValidatePayload(message, message_length, &bad_index))
+      {
+        status = ISOTP_BENCH_STATUS_OK;
+      }
+      else
+      {
+        g_isotp_bench_rx_errors++;
+        g_isotp_bench_rx_bad_index = bad_index;
+      }
+      {
+        uint8_t status_frame[8];
+        IsotpBench_BuildStatusFrame(status_frame, status);
+        (void)CanDriver_SendStd(&g_can, APP_ISOTP_TX_ID, status_frame, 8U);
+      }
+#elif APP_ISOTP_BENCH_TX
+      if (message_length == 1U)
+      {
+        g_isotp_bench_last_ack = message[0];
+      }
+#endif
+    }
+  }
+
+#if APP_ISOTP_BENCH_TX
+  if (!IsotpTx_IsBusy(&g_isotp_tx) &&
+      ((now - g_isotp_bench_last_tx_ms) >= APP_ISOTP_BENCH_PERIOD_MS))
+  {
+    if (!g_isotp_bench_payload_ready)
+    {
+      IsotpBench_BuildPayload(g_isotp_tx_buffer, ISOTP_BENCH_PAYLOAD_SIZE);
+      g_isotp_bench_payload_ready = true;
+    }
+    if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer,
+                      ISOTP_BENCH_PAYLOAD_SIZE) == ISOTP_OK)
+    {
+      g_isotp_bench_tx_started++;
+      g_isotp_bench_last_tx_ms = now;
+    }
+    else
+    {
+      g_isotp_bench_rx_errors++;
+    }
+  }
+#endif
+}
+#endif
 
 /**
   * @brief HAL CAN interrupt callback.

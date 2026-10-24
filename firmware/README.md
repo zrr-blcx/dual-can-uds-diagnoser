@@ -6,10 +6,9 @@ Current project layout:
 
 ```text
 firmware/
-  common/      Shared CAN driver and portable UDS service core
+  common/      Shared CAN driver, ISO-TP core, and portable UDS service core
   ecu-f407/    STM32F407ZGT6 node
   ecu-f103/    STM32F103C8T6 node
-               ISO-TP integration remains pending
 ```
 
 The Week 1 firmware nodes currently implement:
@@ -38,9 +37,18 @@ The Week 4-5 portable UDS core is implemented in:
 - `firmware/common/uds_ecu.c`: application-facing wiring for the DID database,
   routines, and server configuration.
 
-The core does not call HAL. Both applications already call `UdsEcu_Init` and
-`UdsEcu_Tick`. After the ISO-TP layer is complete, pass each reassembled
-request to `UdsEcu_Process` and transmit a nonzero response.
+The UDS core does not call HAL. Both applications call `UdsEcu_Init` and
+`UdsEcu_Tick`.
+
+The Week 3 ISO-TP core is implemented in:
+
+- `firmware/common/isotp.h/.c`: SF/FF/CF/FC, sender/receiver state machines,
+  BS/STmin flow control, and `N_As/N_Bs/N_Cr/N_Ar` timeouts.
+- `firmware/common/isotp_bench.h/.c`: fixed 100-byte hardware bench payload.
+
+Both applications route diagnostic frames through `Isotp_RouteFrame()`, pass
+reassembled requests to `UdsEcu_Process`, and transmit the response through the
+TP sender.
 
 Build both nodes from the repository root:
 
@@ -48,6 +56,9 @@ Build both nodes from the repository root:
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1
 ```
+
+Build the 100-byte node bench variants with `-IsotpBenchTx` or
+`-IsotpBenchRx`.
 
 The build scripts use the GNU ARM GCC bundled with STM32CubeIDE and emit
 ELF, BIN, and HEX files under each node's `Build/` directory.
@@ -62,6 +73,7 @@ Application
   -> STM32 HAL
 ```
 
-Status: Week 1 CAN baseline is complete. Week 5 UDS service v1.0 source and
-host tests are complete, while hardware dual-node UDS remains Target until
-ISO-TP is integrated. See docs/ROADMAP.md for the schedule.
+Status: Week 1 CAN baseline, Week 2 health/Bus-Off work, and Week 3 ISO-TP are
+complete. Both F407/F103 100-byte directions passed on hardware, and both
+formal images passed single-frame and 20-byte multi-frame UDS regression.
+See `docs/isotp_week3.md` and `docs/ROADMAP.md`.

@@ -140,6 +140,7 @@ class IsoTpTransport:
         self.rxid = rxid
         self.timeout = timeout
         self.padding = padding
+        self.stmin_ms = stmin_ms
         self.stmin_s = stmin_ms / 1000.0
         self.block_size = block_size
         self.is_extended_id = is_extended_id
@@ -168,24 +169,66 @@ class IsoTpTransport:
             if message is not None and message.arbitration_id == self.rxid and predicate(message):
                 return message
 
+    def _wait_flow_control(
+        self,
+        timeout: float,
+    ) -> tuple[int, int, int]:
+        """Wait for a flow-control frame and return (status, block_size, stmin_ms).
+
+        Refreshes the deadline on each WAIT so a slowly-responding peer is not
+        falsely timed out.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("timed out waiting for ISO-TP flow control")
+            fc = self._wait_frame(
+                lambda m: (m.data[0] >> 4) & 0x0F == PCI_FC,
+                remaining,
+            )
+            status = fc.data[0] & 0x0F
+            if status == FC_WAIT:
+                # Peer asks for more time; refresh the flow-control window.
+                deadline = time.monotonic() + timeout
+                continue
+            block_size = fc.data[1]
+            stmin_ms = fc.data[2]
+            return status, block_size, stmin_ms
+
     def send(self, payload: bytes) -> None:
         frames = pack_message(payload, padding=self.padding)
         if len(frames) == 1:
             self._send_frame(frames[0])
             return
 
-        self._send_frame(frames[0])
-        fc = self._wait_frame(
-            lambda m: (m.data[0] >> 4) & 0x0F == PCI_FC,
-            self.timeout,
-        )
-        flow_status = fc.data[0] & 0x0F
-        if flow_status != FC_CTS:
-            raise TimeoutError(f"flow control rejected transmission, status={flow_status}")
-        for frame in frames[1:]:
-            if self.stmin_s > 0:
-                time.sleep(self.stmin_s)
-            self._send_frame(frame)
+        self._send_frame(frames[0])  # first frame
+        status, block_size, stmin_ms = self._wait_flow_control(self.timeout)
+        if status != FC_CTS:
+            raise TimeoutError(
+                f"flow control rejected transmission, status={status}"
+            )
+        stmin_s = stmin_ms / 1000.0
+
+        cf_frames = frames[1:]
+        sent = 0
+        while sent < len(cf_frames):
+            block = cf_frames[
+                sent : sent + block_size
+            ] if block_size > 0 else cf_frames[sent:]
+            for frame in block:
+                if stmin_s > 0:
+                    time.sleep(stmin_s)
+                self._send_frame(frame)
+                sent += 1
+            if sent < len(cf_frames):
+                # Block boundary: wait for the next FC before continuing.
+                status, block_size, stmin_ms = self._wait_flow_control(self.timeout)
+                if status != FC_CTS:
+                    raise TimeoutError(
+                        f"flow control rejected next block, status={status}"
+                    )
+                stmin_s = stmin_ms / 1000.0
 
     def receive(self, timeout: float | None = None) -> bytes:
         deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
@@ -204,7 +247,13 @@ class IsoTpTransport:
         total_length = ((message.data[0] & 0x0F) << 8) | message.data[1]
         payload = bytearray(message.data[2 : 2 + MAX_FF_LENGTH])
         expected_index = 1
-        self._send_frame(encode_flow_control(FC_CTS, self.block_size, 0))
+
+        # Advertise the initial block. STmin is broadcast from our config so the
+        # peer knows the minimum spacing to keep between consecutive frames.
+        stmin_ms = self.stmin_ms if hasattr(self, "stmin_ms") else 0
+        self._send_frame(encode_flow_control(FC_CTS, self.block_size, stmin_ms))
+
+        block_count = 0
         while len(payload) < total_length:
             frame = self._wait_frame(
                 lambda m: (m.data[0] >> 4) & 0x0F == PCI_CF
@@ -213,6 +262,17 @@ class IsoTpTransport:
             )
             payload.extend(frame.data[1:])
             expected_index = (expected_index + 1) % 16
+            block_count += 1
+
+            # Advertise the next block when the block size is reached and there
+            # is still more data to come.
+            if (
+                self.block_size > 0
+                and block_count >= self.block_size
+                and len(payload) < total_length
+            ):
+                self._send_frame(encode_flow_control(FC_CTS, self.block_size, stmin_ms))
+                block_count = 0
         return bytes(payload[:total_length])
 
     def close(self) -> None:

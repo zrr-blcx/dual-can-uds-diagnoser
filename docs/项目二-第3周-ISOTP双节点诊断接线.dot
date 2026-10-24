@@ -1,0 +1,32 @@
+digraph 项目二第三周ISOTP双节点诊断接线 {
+  rankdir=LR;
+  labelloc=t;
+  label="项目二 - 第3周 ISO-TP 双节点 + CANable 诊断接线（500 kbps）";
+  fontname="Microsoft YaHei";
+  fontsize=16;
+
+  node [shape=box, style="rounded,filled", fontname="Microsoft YaHei", fontsize=12];
+
+  // 节点
+  f407 [label="STM32F407ZGT6\n(正点原子)\nUDS 服务器 0x7E0/0x7E8", fillcolor="#D6E4FF", color="#1F4E9C"];
+  f103 [label="STM32F103C8T6\n(江协大)\nUDS 服务器 0x7E1/0x7E9", fillcolor="#D6E4FF", color="#1F4E9C"];
+  canh [label="CAN 总线\n(双绞线 CANH / CANL)\n500 kbps", shape=ellipse, style=filled, fillcolor="#FFF3CD", color="#B8860B"];
+  canable [label="CANable\n(slcan / 250 kbps-1 Mbps)\n抓包监听 / 主动诊断", fillcolor="#D9F2E6", color="#1E7A46"];
+  pc [label="PC\npython-can + udsoncan\n自研 diagnoser", fillcolor="#F3D9E6", color="#7A1E5C"];
+
+  // 接线
+  edge [fontname="Microsoft YaHei", fontsize=10];
+  f407 -> canh [label="SN65HVD230 收发器\nTJA1050 兼容", arrowhead=none];
+  f103 -> canh [label="SN65HVD230 收发器", arrowhead=none];
+  canable -> canh [label="挂在总线上\n(CANH/CANL)", arrowhead=none, style=dashed];
+  canable -> pc [label="USB (slcan/gs_usb)", color="#7A1E5C", arrowhead=none];
+
+  // 供电
+  pwr [label="5V USB 供电（F407）/ 3.3V（F103）\n共地：所有地线必须相连", shape=note, style=filled, fillcolor="#FCE8E8", color="#B02020", fontcolor="#B02020"];
+  pwr -> f407 [style=dotted, arrowhead=none];
+  pwr -> f103 [style=dotted, arrowhead=none];
+
+  // 120欧终端电阻说明
+  term [label="终端电阻：两个 SN65HVD230 模块\n各带 120 Ω，分别位于总线两端\nCANable 位于中间，120 Ω 开关必须关闭\n断电测 CANH-CANL ≈ 60 Ω", shape=note, style=filled, fillcolor="#E8ECFA", color="#44527B"];
+  term -> canh [style=dotted, arrowhead=none];
+}

@@ -65,6 +65,9 @@ HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
                                     const uint8_t *data,
                                     uint8_t len);
 
+/* True while any CAN transmit mailbox is still waiting for bus completion. */
+bool CanDriver_IsTxPending(const CanDriver_t *driver);
+
 void CanDriver_RxIrqHandler(CanDriver_t *driver);
 
 /* Wire the error/Bus-Off policy core; optional, but then errors are only

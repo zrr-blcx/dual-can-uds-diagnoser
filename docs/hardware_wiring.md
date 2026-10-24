@@ -95,3 +95,18 @@ before connecting an external module.
 - Health snapshot read-out: `STM32_Programmer_CLI -c port=SWD -u <address> 4 file.bin`.
 - Wiring and step order: `docs/diagrams/week2_stlink_debug_isolate_wiring.svg`
   (source: `week2_stlink_debug_isolate_wiring.dot`).
+
+## Week 3 ISO-TP Diagnostic Topology
+
+- The physical CAN topology is unchanged from the Week 2 dual-node bench:
+  F407 and F103 each use one external SN65HVD230, both modules provide the
+  two end terminations, and CANable taps the middle with its 120 ohm switch
+  off.
+- The relay and ST-Link are optional for Week 3. Keep the relay de-energized
+  (`CH1` normally closed, `CH2` normally open).
+- CANable may run as a passive capture node or as the active diagnostic
+  tester. Label the intended mode explicitly; "capture" alone does not imply
+  listen-only.
+- Diagnostic IDs are `0x7E0/0x7E8` for F407 and `0x7E1/0x7E9` for F103.
+- Diagram: `docs/项目二-第3周-ISOTP双节点诊断接线.svg`
+  (source: `docs/项目二-第3周-ISOTP双节点诊断接线.dot`).
