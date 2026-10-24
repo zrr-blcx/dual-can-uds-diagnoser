@@ -302,7 +302,7 @@ static void test_multi_frame_100(void)
   CHECK(IsotpTx_IsBusy(&tx));
 
   steps = pump_bus(&tx, &rx, 500U);
-  CHECK(steps < 500U);
+  CHECK(steps < 500);
 
   CHECK(!IsotpTx_IsBusy(&tx));
   CHECK(IsotpRx_MessageReady(&rx));
@@ -344,7 +344,7 @@ static void test_sn_wraparound_120(void)
 
   CHECK(IsotpTx_Start(&tx, payload, sizeof(payload)) == ISOTP_OK);
   steps = pump_bus(&tx, &rx, 500U);
-  CHECK(steps < 500U);
+  CHECK(steps < 500);
   CHECK(!IsotpTx_IsBusy(&tx));
   CHECK(IsotpRx_MessageReady(&rx));
   CHECK(IsotpRx_Read(&rx, out, sizeof(out), &out_len) == ISOTP_OK);
