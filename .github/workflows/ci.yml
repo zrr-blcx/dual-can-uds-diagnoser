@@ -22,4 +22,21 @@ jobs:
       - name: Install project
         run: python -m pip install -e ".[dev]"
       - name: Run tests
-        run: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -vv 2>&1 | tee pytest.log
+      - name: Publish test failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### Pytest failure tail"
+            echo '```text'
+            if [ -f pytest.log ]; then
+              tail -n 200 pytest.log
+            else
+              echo "pytest did not start; inspect the preceding CI steps."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
