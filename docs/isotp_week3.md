@@ -114,3 +114,13 @@ powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -IsotpBench
 双向 100 字节、负向故障注入和正式 UDS 回归均通过，第 3 周里程碑完成。
 
 最终候选代表性 FF/FC/CF/状态帧见 `docs/isotp_frame_examples.md`。
+
+## 发布验证
+
+- 功能与验收提交：`77f1d2c`。
+- 主机测试、双向 100 字节、双向 120 字节、错误 SN 和四类超时均已纳入
+  `docs/test_report.md` 与 `docs/isotp_acceptance_matrix.md`。
+- GitHub Actions 运行 `40086628980` 中，Python 3.10、3.11、3.12 三个任务
+  全部通过；该运行对应 Linux CI 导入修复提交 `41ea414`。
+- CI 曾因测试文件使用项目根目录包名导入 `tests.host_c_build` 而失败；
+  改为从测试目录直接导入 `host_c_build` 后恢复。协议代码未因该问题改动。

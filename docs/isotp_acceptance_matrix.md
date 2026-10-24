@@ -1,7 +1,7 @@
 # Week 3 ISO-TP Acceptance Matrix
 
-This matrix maps the original Week 3 Roadmap to implementation and evidence.
-It does not change the Roadmap status; user acceptance remains required.
+This matrix maps the original Week 3 Roadmap to implementation and evidence,
+including the final hardware and CI acceptance results.
 
 ## Original Roadmap Requirements
 
@@ -22,6 +22,7 @@ It does not change the Roadmap status; user acceptance remains required.
 | CANable frame verification | Python-can capture and trace summarizer | `isotp_frame_examples.md` | PASS |
 | C TP source delivery | Firmware common sources | Repository source | PASS |
 | Integration record | `isotp_week3.md` and test report | Repository docs | PASS |
+| CI portability | Linux GitHub Actions, Python 3.10/3.11/3.12 | Run `40086628980`, 3/3 jobs | PASS |
 
 ## Final Candidate Hardware Values
 
@@ -50,9 +51,9 @@ These items are useful but were not explicit Week 3 Roadmap requirements:
 ## Final Decision
 
 The original Week 3 Roadmap requirements are implemented and have host plus
-final-candidate hardware evidence. The user requested completion of the
-remaining negative hardware cases, and all passed. The Week 3 Roadmap milestone
-is complete as of 2026-10-24.
+final-candidate hardware evidence. The remaining negative hardware cases all
+passed, and the final CI matrix is green. The Week 3 Roadmap milestone is
+complete as of 2026-10-24.
 
 Optional stricter hardware cases not required by the original wording:
 

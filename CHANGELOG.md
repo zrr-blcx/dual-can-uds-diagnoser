@@ -86,3 +86,9 @@
   silently break the classifier, and add `can_health.c` to both build scripts.
 - Extract the firmware host-test build wrapper into `tests/host_c_build.py` so
   both portable firmware modules share one compile-and-run helper.
+- Complete Week 3 final acceptance on the hardened firmware: bidirectional
+  100-byte transfers, bidirectional 120-byte SN wrap, wrong-SN recovery,
+  `N_As/N_Bs/N_Cr/N_Ar` timeouts, and formal UDS regression.
+- Publish pytest failure details as GitHub check annotations and fix the Linux
+  direct-`pytest` helper import. The final Python 3.10/3.11/3.12 matrix passes
+  in Actions run `40086628980`.

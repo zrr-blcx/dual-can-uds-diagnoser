@@ -1,4 +1,4 @@
-# Test Report Template
+# Test Report
 
 > Fill in measured results after hardware testing. Values marked Target are not
 > yet measured.
@@ -7,9 +7,9 @@
 
 | Item | Value |
 | --- | --- |
-| Date | 2026-10-22 |
+| Date | 2026-10-24 |
 | Tester | Local bench run |
-| Firmware version | Week 2 formal build, 500 ms cyclic frame |
+| Firmware version | Week 3 final formal build, ISO-TP and CAN RX queue |
 | Diagnostic tool version | 1.0.0 |
 | CAN bitrate | 500 kbps |
 | Transceivers | SN65HVD230 x2 |
@@ -99,10 +99,14 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
 | 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
 | 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `100 passed` |
+| 2026-10-24 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40086628980` |
 
-The `py` launcher was unavailable in the current Windows shell, so the project
-virtual environment was used for the complete regression. The warning came from
-writing `.pytest_cache`; no test case failed or was skipped.
+The 2026-10-24 local regression used the `py -3.14` launcher with the cache
+provider disabled. GitHub Actions independently passed the complete suite on
+Python 3.10, 3.11, and 3.12. An initial CI failure was limited to a Linux test
+import (`ModuleNotFoundError: No module named 'tests'`); the test now imports
+the shared helper from the `tests` directory, matching the other host-test
+modules. No ISO-TP or firmware assertion changed for that fix.
 
 The 2026-10-04 run includes a C host test that compiles the firmware UDS
 service layer (`uds_server.c`, `uds_reference_routines.c`, `uds_did_db.c`,
@@ -397,6 +401,7 @@ multi-frame `22 F190`.
 
 - Physical frame loss below 0.1% at normal load: Target.
 - Week 3 ISO-TP bidirectional 100-byte transfer: PASS.
-- UDS timeout handling verified: Target.
+- UDS timeout handling: PASS in host/virtual tests and final multi-frame UDS
+  regression.
 - Bus-Off physical detection, automatic recovery, and sustained-fault software
   reset escalation: PASS.

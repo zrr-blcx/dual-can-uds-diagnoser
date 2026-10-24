@@ -26,6 +26,7 @@
   100-byte bench modes. The software core, host tests, final bidirectional
   hardware revalidation, negative fault tests and formal UDS regression pass.
   The Week 3 milestone is complete.
+- CI matrix: Python 3.10, 3.11, and 3.12 pass in Actions run `40086628980`.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
