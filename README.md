@@ -11,8 +11,9 @@
 
 - Python diagnostic tool V1.0 scaffold: ready for development and tests.
 - STM32 firmware: F407/F103 Week 1 CAN 500 kbps baseline and deliverables complete.
-- Week 4 portable UDS core: `0x10/0x22/0x3E`, DID database, and S3 timeout
-  implemented and host-tested.
+- Week 4 UDS core: `0x10/0x22/0x3E`, DID database, S3 timeout, multi-DID,
+  NRC checks, dual-node routing, and `udsoncan` CANable interoperability pass
+  on F407/F103 hardware. The Week 4 milestone is complete.
 - Week 5 UDS service v1.0: `0x27/0x2E/0x31`, security state machine, write
   rules, routine control, NRC coverage, and dual-node virtual flow.
 - Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` wait, timeout
@@ -109,6 +110,9 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 
 第 3 周 ISO-TP 设计、测试和当前硬件结论见
 [docs/isotp_week3.md](docs/isotp_week3.md)。
+
+第 4 周 UDS 会话、DID、S3、NRC、双节点与 udsoncan 实机结果见
+[docs/uds_week4_acceptance.md](docs/uds_week4_acceptance.md)。
 
 协议参数与验收契约见
 [docs/isotp_protocol_contract.md](docs/isotp_protocol_contract.md)。

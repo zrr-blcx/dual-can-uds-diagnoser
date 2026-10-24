@@ -18,6 +18,11 @@
 - Add host-side C behavior tests for the firmware UDS core.
 - Add a shared DID database and align `0xF190` with VIN.
 - Add a single-node `uds-smoke` workflow for virtual or physical CAN.
+- Complete Week 4 hardware acceptance on F407/F103: all three sessions,
+  standard and multi-DID reads, S3 keepalive/expiry, wrong-length and unknown
+  DID negative responses, and dual-node request/response addressing.
+- Validate `udsoncan` 1.26 against both STM32 nodes through a real CANable and
+  the project ISO-TP connection adapter.
 - Add `0x27` security access with seed/key state, attempt limiting, and a
   10-second delay after three invalid keys.
 - Add session and security gates for `0x2E`, plus writable DID storage and

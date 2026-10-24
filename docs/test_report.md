@@ -49,10 +49,10 @@
 | --- | --- | --- | --- |
 | 0x11 | Unsupported service | PASS | Host PASS, HW Target |
 | 0x12 | Unsupported subfunction | PASS | Host PASS, HW Target |
-| 0x13 | Wrong message length | PASS | Host PASS, HW Target |
+| 0x13 | Wrong message length | PASS | Host + F407/F103 hardware PASS |
 | 0x22 | Conditions not correct | PASS | Host PASS, HW Target |
 | 0x24 | Request sequence error | PASS | Host PASS, HW Target |
-| 0x31 | Request out of range | PASS | Host PASS, HW Target |
+| 0x31 | Request out of range | PASS | Host + F407/F103 hardware PASS |
 | 0x33 | Security access denied | PASS | Host PASS, HW Target |
 | 0x35 | Invalid key | PASS | Host PASS, HW Target |
 | 0x36 | Exceeded number of attempts | PASS | Host PASS, HW Target |
@@ -139,7 +139,7 @@ An initial dual-node CAN exchange was observed. After the intermittent physical
 bus connection was corrected, repeated tests confirmed stable bidirectional
 traffic.
 
-## Week 4 UDS Host Validation
+## Week 4 UDS Host and Hardware Validation
 
 Measured on 2026-09-27 with the portable C UDS core:
 
@@ -162,6 +162,28 @@ python -m diagnoser.cli uds-smoke --node ecu1
 The workflow verified `10 03`, three standard DID reads, and unknown-DID NRC
 `0x31`. This is a host-side result; it does not replace F407/F103 CANable
 acceptance.
+
+### F407/F103 Hardware Validation
+
+Measured on 2026-10-24 through a CANable slcan adapter at 500 kbps. The Week 2
+fault relay remained installed but de-energized during the test.
+
+| Test | F407 | F103 |
+| --- | --- | --- |
+| `10 01`, `10 02`, `10 03` | PASS | PASS |
+| `22 F190`, `22 F193`, `22 0100` | PASS | PASS |
+| Multi-DID `22 F193 0100` | PASS, 34.7 ms | PASS, 37.5 ms |
+| `3E 00` keeps Extended beyond the original 5 s deadline | PASS | PASS |
+| S3 expiry returns Default | PASS, `7F 2E 7E` | PASS, `7F 2E 7E` |
+| Wrong length `22 F1` | PASS, `7F 22 13` | PASS, `7F 22 13` |
+| Unknown DID | PASS, `7F 22 31` | PASS, `7F 22 31` |
+| Physical request/response IDs | `0x7E0/0x7E8` | `0x7E1/0x7E9` |
+| `udsoncan` session and DID reads | PASS | PASS |
+| `udsoncan` negative response | PASS, NRC `0x31` | PASS, NRC `0x31` |
+
+Both clients ran in one CANable process for the dual-node check. No response
+crossed between the F407 and F103. Full commands and measurements are recorded
+in [uds_week4_acceptance.md](uds_week4_acceptance.md).
 
 ## Week 5 UDS Security / Write / Routine Validation
 
@@ -401,7 +423,7 @@ multi-frame `22 F190`.
 
 - Physical frame loss below 0.1% at normal load: Target.
 - Week 3 ISO-TP bidirectional 100-byte transfer: PASS.
-- UDS timeout handling: PASS in host/virtual tests and final multi-frame UDS
-  regression.
+- Week 4 UDS sessions, DID reads, S3 timeout, NRC, dual-node routing and
+  udsoncan CANable interoperability: PASS.
 - Bus-Off physical detection, automatic recovery, and sustained-fault software
   reset escalation: PASS.

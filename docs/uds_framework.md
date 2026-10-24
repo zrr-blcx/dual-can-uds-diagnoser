@@ -2,10 +2,10 @@
 
 ## 范围
 
-第 4 周实现不依赖 STM32 HAL 和 CAN 传输的 UDS 服务核心，并在主机侧完成
-行为验证。第 5 周在同一核心上补齐安全访问、写 DID 和例行控制。ISO-TP
-已完成后，F407/F103 的 `10 03` 与 `22 F190` 多帧响应通过实机回归；
-完整 `27/2E/31` 实机验收仍保持 Target。
+第 4 周实现不依赖 STM32 HAL 和 CAN 传输的 UDS 服务核心。第 5 周在同一
+核心上补齐安全访问、写 DID 和例行控制。ISO-TP 完成后，F407/F103 已通过
+三种会话、标准 DID、多 DID、S3 超时、NRC 和 `udsoncan` 的 CANable 实机
+验收；完整 `27/2E/31` 实机验收仍保持 Target。
 
 ## 分层边界
 
@@ -115,3 +115,5 @@ python -m diagnoser.cli --interface slcan --channel COMx uds-smoke --node ecu1
 ```
 
 真实通道验证前必须确认 CANable 接口、波特率、物理总线和节点寻址均正确。
+第 4 周完整实机测量见
+[`uds_week4_acceptance.md`](uds_week4_acceptance.md)。
