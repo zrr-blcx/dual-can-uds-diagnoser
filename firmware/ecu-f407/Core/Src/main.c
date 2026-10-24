@@ -60,6 +60,12 @@
 #define APP_ISOTP_TX_BUFFER_SIZE 300U
 #define APP_ISOTP_RX_BUFFER_SIZE 300U
 #define APP_ISOTP_BENCH_PERIOD_MS 1000U
+#ifndef APP_ISOTP_BENCH_PAYLOAD_SIZE
+#define APP_ISOTP_BENCH_PAYLOAD_SIZE 100U
+#endif
+#ifndef APP_ISOTP_FORCE_TX_BUSY
+#define APP_ISOTP_FORCE_TX_BUSY 0U
+#endif
 /* Bring-up switch: 20 ms cyclic frames so a bus short reaches Bus-Off in under
    a second (32 failures) instead of ~9 s at the normal 500 ms period.
    The shipped value is 0. */
@@ -135,6 +141,19 @@ static uint8_t g_isotp_tx_buffer[APP_ISOTP_TX_BUFFER_SIZE];
 static uint8_t g_isotp_rx_buffer[APP_ISOTP_RX_BUFFER_SIZE];
 static IsotpRx_t g_isotp_rx;
 static IsotpTx_t g_isotp_tx;
+
+typedef struct
+{
+  uint32_t tx_errors;
+  uint32_t rx_errors;
+  uint32_t tx_timeouts;
+  uint32_t rx_timeouts;
+  int32_t last_tx_result;
+  int32_t last_rx_result;
+  int32_t last_route_result;
+} IsotpTestStats_t;
+
+volatile IsotpTestStats_t g_isotp_test_stats;
 #if !APP_ISOTP_BENCH_TX && !APP_ISOTP_BENCH_RX
 static bool g_isotp_serving = false;
 #endif
@@ -292,6 +311,7 @@ int main(void)
     static uint8_t tx_value = 0U;
     uint32_t now = HAL_GetTick();
 
+    CanDriver_ProcessRx(&g_can);
     UdsEcu_Tick(&g_uds, now);
     APP_ServiceIsotp(now);
 
@@ -437,7 +457,12 @@ static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len)
   }
   else if (id == APP_ISOTP_RX_ID && len == 8U)
   {
-    (void)Isotp_RouteFrame(&g_isotp_tx, &g_isotp_rx, data);
+    IsotpResult_t result = Isotp_RouteFrame(&g_isotp_tx, &g_isotp_rx, data);
+    g_isotp_test_stats.last_route_result = (int32_t)result;
+    if (result != ISOTP_OK)
+    {
+      g_isotp_test_stats.rx_errors++;
+    }
   }
 }
 
@@ -451,7 +476,13 @@ static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len)
 static bool APP_IsotpSend(void *ctx, uint32_t txid, const uint8_t data[8U])
 {
   (void)ctx;
+#if APP_ISOTP_FORCE_TX_BUSY
+  (void)txid;
+  (void)data;
+  return false;
+#else
   return CanDriver_SendStd(&g_can, txid, data, 8U) == HAL_OK;
+#endif
 }
 
 static bool APP_IsotpTxPending(void *ctx)
@@ -483,18 +514,36 @@ static uint32_t APP_IsotpTick(void *ctx)
   */
 static void APP_ServiceIsotp(uint32_t now)
 {
+  IsotpResult_t result;
+
+  result = IsotpTx_Poll(&g_isotp_tx);
+  g_isotp_test_stats.last_tx_result = (int32_t)result;
+  if (result == ISOTP_ERR_TIMEOUT)
+  {
+    g_isotp_test_stats.tx_timeouts++;
+    g_isotp_test_stats.tx_errors++;
+  }
+  else if (result != ISOTP_OK)
+  {
+    g_isotp_test_stats.tx_errors++;
+  }
+
+  result = IsotpRx_Poll(&g_isotp_rx);
+  g_isotp_test_stats.last_rx_result = (int32_t)result;
+  if (result == ISOTP_ERR_TIMEOUT)
+  {
+    g_isotp_test_stats.rx_timeouts++;
+    g_isotp_test_stats.rx_errors++;
+  }
+  else if (result != ISOTP_OK)
+  {
+    g_isotp_test_stats.rx_errors++;
+  }
+
 #if APP_ISOTP_BENCH_TX || APP_ISOTP_BENCH_RX
-  (void)IsotpTx_Poll(&g_isotp_tx);
-  (void)IsotpRx_Poll(&g_isotp_rx);
   APP_ServiceIsotpBench(now);
 #else
   uint16_t response_length = 0U;
-
-  /* Sender: drive multi-frame response transmission. */
-  (void)IsotpTx_Poll(&g_isotp_tx);
-
-  /* Receiver: report a timeout if the peer stalled mid-transfer. */
-  (void)IsotpRx_Poll(&g_isotp_rx);
 
   /* A complete request is buffered: serve it and send the response. */
   if (IsotpRx_MessageReady(&g_isotp_rx) && !g_isotp_serving)
@@ -540,7 +589,8 @@ static void APP_ServiceIsotpBench(uint32_t now)
       uint16_t bad_index = 0xFFFFU;
       uint8_t status = ISOTP_BENCH_STATUS_FAIL;
       g_isotp_bench_rx_messages++;
-      if (IsotpBench_ValidatePayload(message, message_length, &bad_index))
+      if (IsotpBench_ValidatePayload(message, message_length,
+                                     APP_ISOTP_BENCH_PAYLOAD_SIZE, &bad_index))
       {
         status = ISOTP_BENCH_STATUS_OK;
       }
@@ -569,11 +619,11 @@ static void APP_ServiceIsotpBench(uint32_t now)
   {
     if (!g_isotp_bench_payload_ready)
     {
-      IsotpBench_BuildPayload(g_isotp_tx_buffer, ISOTP_BENCH_PAYLOAD_SIZE);
+      IsotpBench_BuildPayload(g_isotp_tx_buffer, APP_ISOTP_BENCH_PAYLOAD_SIZE);
       g_isotp_bench_payload_ready = true;
     }
     if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer,
-                      ISOTP_BENCH_PAYLOAD_SIZE) == ISOTP_OK)
+                      APP_ISOTP_BENCH_PAYLOAD_SIZE) == ISOTP_OK)
     {
       g_isotp_bench_tx_started++;
       g_isotp_bench_last_tx_ms = now;

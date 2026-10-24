@@ -1,6 +1,8 @@
 ﻿param(
     [switch]$IsotpBenchTx,
     [switch]$IsotpBenchRx,
+    [ValidateRange(1, 300)][int]$IsotpBenchLength = 100,
+    [switch]$IsotpForceTxBusy,
     [switch]$WwdgSelfTest,
     [switch]$WwdgEarlyFeedTest
 )
@@ -62,11 +64,19 @@ if ($IsotpBenchTx -and $IsotpBenchRx) {
 }
 if ($IsotpBenchTx) {
     $commonFlags += '-DAPP_ISOTP_BENCH_TX=1U'
-    Write-Host 'ISO-TP BENCH: 100-byte sender'
+    Write-Host 'ISO-TP BENCH: sender'
 }
 if ($IsotpBenchRx) {
     $commonFlags += '-DAPP_ISOTP_BENCH_RX=1U'
-    Write-Host 'ISO-TP BENCH: 100-byte receiver'
+    Write-Host 'ISO-TP BENCH: receiver'
+}
+if ($IsotpBenchTx -or $IsotpBenchRx) {
+    $commonFlags += "-DAPP_ISOTP_BENCH_PAYLOAD_SIZE=$IsotpBenchLength"
+    Write-Host "ISO-TP BENCH LENGTH: $IsotpBenchLength"
+}
+if ($IsotpForceTxBusy) {
+    $commonFlags += '-DAPP_ISOTP_FORCE_TX_BUSY=1U'
+    Write-Host 'ISO-TP FAULT: force transmit-busy path'
 }
 if ($WwdgSelfTest) {
     $commonFlags += '-DAPP_WWDG_SELFTEST=1U'
@@ -81,6 +91,7 @@ $sources = @()
 $sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_health.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_rx_queue.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp.c')
 if ($IsotpBenchTx -or $IsotpBenchRx) {
     $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp_bench.c')

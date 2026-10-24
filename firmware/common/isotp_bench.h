@@ -12,6 +12,7 @@ void IsotpBench_BuildPayload(uint8_t *buffer, uint16_t length);
 
 bool IsotpBench_ValidatePayload(const uint8_t *buffer,
                                 uint16_t length,
+                                uint16_t expected_length,
                                 uint16_t *bad_index);
 
 void IsotpBench_BuildStatusFrame(uint8_t frame[8], uint8_t status);

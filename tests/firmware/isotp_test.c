@@ -27,6 +27,7 @@ typedef struct
   FakeBus_t *bus;
   uint32_t tick;
   bool tx_pending;
+  uint16_t send_busy_count;
 } FakeCtx_t;
 
 static FakeBus_t g_bus;
@@ -40,6 +41,11 @@ static void fake_bus_init(FakeBus_t *bus)
 static bool fake_send(void *ctx, uint32_t txid, const uint8_t data[ISOTP_CAN_DLC])
 {
   FakeCtx_t *c = (FakeCtx_t *)ctx;
+  if (c->send_busy_count > 0U)
+  {
+    c->send_busy_count--;
+    return false;
+  }
   if (c->bus->count >= FAKE_QUEUE_SIZE)
   {
     return false;
@@ -147,6 +153,7 @@ static void configure_channel(IsotpChannel_t *chan)
   g_ctx.bus = &g_bus;
   g_ctx.tick = 0U;
   g_ctx.tx_pending = false;
+  g_ctx.send_busy_count = 0U;
 
   chan->send = fake_send;
   chan->receive = fake_receive;
@@ -193,6 +200,71 @@ static void test_single_frame(void)
   CHECK(IsotpRx_Read(&rx, out, sizeof(out), &out_len) == ISOTP_OK);
   CHECK(out_len == 3U);
   CHECK(out[0] == 0x10U && out[1] == 0x03U && out[2] == 0xAAU);
+}
+
+static void test_single_frame_rejects_zero_length(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t frame[ISOTP_CAN_DLC] = {0};
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  CHECK(IsotpRx_OnFrame(&rx, frame) == ISOTP_ERR_INVALID);
+  CHECK(!IsotpRx_MessageReady(&rx));
+}
+
+static void test_single_frame_does_not_overwrite_unread_message(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t first[ISOTP_CAN_DLC] = {0x03U, 0x10U, 0x03U, 0xAAU};
+  uint8_t second[ISOTP_CAN_DLC] = {0x02U, 0x22U, 0xF1U};
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  CHECK(IsotpRx_OnFrame(&rx, first) == ISOTP_OK);
+  CHECK(IsotpRx_OnFrame(&rx, second) == ISOTP_ERR_BUSY);
+  CHECK(IsotpRx_MessageReady(&rx));
+}
+
+static void test_first_frame_rejects_short_declared_length(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t frame[ISOTP_CAN_DLC] = {0};
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  frame[0] = 0x10U;
+  frame[1] = 7U;
+  CHECK(IsotpRx_OnFrame(&rx, frame) == ISOTP_ERR_INVALID);
+  CHECK(!IsotpRx_IsBusy(&rx));
+  CHECK(g_bus.count == 0U);
 }
 
 /* ---------- multi-frame, 100 bytes, BS=8, STmin=0 ---------- */
@@ -342,6 +414,33 @@ static void test_sn_error(void)
   bad_cf[5] = 0xEEU; bad_cf[6] = 0xFFU; bad_cf[7] = 0xCCU;
   CHECK(IsotpRx_OnFrame(&rx, bad_cf) == ISOTP_ERR_INVALID);
   CHECK(!IsotpRx_MessageReady(&rx));
+  CHECK(!IsotpRx_IsBusy(&rx));
+  bad_cf[0] = (uint8_t)((ISOTP_PCI_CF << 4) | 0x01U);
+  CHECK(IsotpRx_OnFrame(&rx, bad_cf) == ISOTP_ERR_INVALID);
+}
+
+static void test_duplicate_first_frame_aborts_transfer(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[64];
+  uint8_t ff[ISOTP_CAN_DLC] = {0};
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  ff[0] = 0x10U;
+  ff[1] = 20U;
+  CHECK(IsotpRx_OnFrame(&rx, ff) == ISOTP_OK);
+  CHECK(IsotpRx_IsBusy(&rx));
+  CHECK(IsotpRx_OnFrame(&rx, ff) == ISOTP_ERR_INVALID);
+  CHECK(!IsotpRx_IsBusy(&rx));
 }
 
 /* ---------- buffer overflow: declared length exceeds buffer ---------- */
@@ -654,6 +753,28 @@ static void test_config_init_applies_project_defaults(void)
   CHECK(fc[2] == 20U);
 }
 
+static void test_config_allows_zero_block_size(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t ff[ISOTP_CAN_DLC] = {0};
+  uint8_t fc[ISOTP_CAN_DLC];
+  uint32_t id = 0U;
+
+  configure_channel(&chan);
+  IsotpConfig_Init(&cfg, 0x7E8U, 0x7E0U, rx_buf, sizeof(rx_buf));
+  cfg.block_size = 0U;
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  ff[0] = 0x10U;
+  ff[1] = 20U;
+  CHECK(IsotpRx_OnFrame(&rx, ff) == ISOTP_OK);
+  CHECK(fake_receive(&g_ctx, &id, fc));
+  CHECK(fc[1] == 0U);
+}
+
 /* ---------- N_Cr: receiver stalls waiting for the next CF ---------- */
 static void test_n_cr_receiver_timeout(void)
 {
@@ -738,6 +859,33 @@ static void test_n_ar_timeout_while_fc_pending(void)
   CHECK(!IsotpRx_IsBusy(&rx));
 }
 
+static void test_timeout_across_tick_wrap(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t ff[ISOTP_CAN_DLC] = {0};
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.n_ar_ms = 10U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  g_ctx.tx_pending = true;
+  g_ctx.tick = 0xFFFFFFF0U;
+  ff[0] = 0x10U;
+  ff[1] = 20U;
+  CHECK(IsotpRx_OnFrame(&rx, ff) == ISOTP_OK);
+  g_ctx.tick = 0x00000010U;
+  CHECK(IsotpRx_Poll(&rx) == ISOTP_ERR_TIMEOUT);
+  CHECK(!IsotpRx_IsBusy(&rx));
+}
+
 /* ---------- N_Cr: sender stalls waiting for the next block FC ---------- */
 static void test_n_cr_timeout(void)
 {
@@ -810,13 +958,109 @@ static void test_n_as_timeout(void)
   CHECK(!IsotpTx_IsBusy(&tx));
 }
 
+static void test_tx_retries_busy_transmit_mailbox(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpTx_t tx;
+  uint8_t payload[20];
+  uint8_t frame[ISOTP_CAN_DLC];
+  uint32_t id = 0U;
+  uint16_t i;
+
+  for (i = 0U; i < sizeof(payload); i++)
+  {
+    payload[i] = (uint8_t)i;
+  }
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.n_as_ms = 100U;
+  IsotpTx_Init(&tx, &chan, &cfg);
+
+  g_ctx.send_busy_count = 1U;
+  CHECK(IsotpTx_Start(&tx, payload, sizeof(payload)) == ISOTP_OK);
+  CHECK(IsotpTx_IsBusy(&tx));
+  CHECK(g_ctx.bus->count == 0U);
+
+  CHECK(IsotpTx_Poll(&tx) == ISOTP_OK);
+  CHECK(fake_receive(&g_ctx, &id, frame));
+  CHECK(id == 0x7E8U);
+  CHECK((frame[0] >> 4) == ISOTP_PCI_FF);
+}
+
+static void test_tx_times_out_waiting_for_mailbox(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpTx_t tx;
+  uint8_t payload[20];
+  uint16_t i;
+
+  for (i = 0U; i < sizeof(payload); i++)
+  {
+    payload[i] = (uint8_t)i;
+  }
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.n_as_ms = 10U;
+  IsotpTx_Init(&tx, &chan, &cfg);
+
+  g_ctx.send_busy_count = 100U;
+  CHECK(IsotpTx_Start(&tx, payload, sizeof(payload)) == ISOTP_OK);
+  g_ctx.tick += 11U;
+  CHECK(IsotpTx_Poll(&tx) == ISOTP_ERR_TIMEOUT);
+  CHECK(!IsotpTx_IsBusy(&tx));
+}
+
+static void test_rx_retries_busy_flow_control_enqueue(void)
+{
+  IsotpChannel_t chan;
+  IsotpConfig_t cfg;
+  IsotpRx_t rx;
+  uint8_t rx_buf[32];
+  uint8_t ff[ISOTP_CAN_DLC] = {0};
+  uint8_t fc[ISOTP_CAN_DLC];
+  uint32_t id = 0U;
+
+  configure_channel(&chan);
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.txid = 0x7E8U;
+  cfg.rxid = 0x7E0U;
+  cfg.rx_buffer = rx_buf;
+  cfg.rx_buffer_size = sizeof(rx_buf);
+  cfg.n_ar_ms = 100U;
+  IsotpRx_Init(&rx, &chan, &cfg);
+
+  g_ctx.send_busy_count = 1U;
+  ff[0] = 0x10U;
+  ff[1] = 20U;
+  CHECK(IsotpRx_OnFrame(&rx, ff) == ISOTP_OK);
+  CHECK(IsotpRx_IsBusy(&rx));
+  CHECK(g_ctx.bus->count == 0U);
+
+  CHECK(IsotpRx_Poll(&rx) == ISOTP_OK);
+  CHECK(fake_receive(&g_ctx, &id, fc));
+  CHECK(id == 0x7E8U);
+  CHECK((fc[0] >> 4) == ISOTP_PCI_FC);
+}
+
 int main(void)
 {
   test_single_frame();
+  test_single_frame_rejects_zero_length();
+  test_single_frame_does_not_overwrite_unread_message();
+  test_first_frame_rejects_short_declared_length();
   test_multi_frame_100();
   test_sn_wraparound_120();
   test_n_bs_timeout();
   test_sn_error();
+  test_duplicate_first_frame_aborts_transfer();
   test_buffer_overflow();
   test_fc_wait();
   test_fc_overflow();
@@ -825,11 +1069,16 @@ int main(void)
   test_flow_control_uses_response_id();
   test_frame_dispatch_routes_flow_control_to_sender();
   test_config_init_applies_project_defaults();
+  test_config_allows_zero_block_size();
   test_n_cr_receiver_timeout();
   test_receiver_uses_n_cr_after_flow_control();
   test_n_ar_timeout_while_fc_pending();
+  test_timeout_across_tick_wrap();
   test_n_cr_timeout();
   test_n_as_timeout();
+  test_tx_retries_busy_transmit_mailbox();
+  test_tx_times_out_waiting_for_mailbox();
+  test_rx_retries_busy_flow_control_enqueue();
 
   if (failures != 0)
   {

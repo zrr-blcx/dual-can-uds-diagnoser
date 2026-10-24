@@ -63,6 +63,7 @@ HAL_StatusTypeDef CanDriver_Init(CanDriver_t *driver,
   driver->time_seg1 = time_seg1;
   driver->time_seg2 = time_seg2;
   driver->filter_bank = filter_bank;
+  CanRxQueue_Init(&driver->rx_queue);
 
   handle->Init.Prescaler = prescaler;
   handle->Init.Mode = CAN_MODE_NORMAL;
@@ -164,16 +165,30 @@ void CanDriver_RxIrqHandler(CanDriver_t *driver)
     return;
   }
 
-  if (HAL_CAN_GetRxMessage(driver->handle, CAN_RX_FIFO0, &rx_header, data) != HAL_OK)
+  while (HAL_CAN_GetRxFifoFillLevel(driver->handle, CAN_RX_FIFO0) > 0U)
+  {
+    if (HAL_CAN_GetRxMessage(driver->handle, CAN_RX_FIFO0, &rx_header, data) != HAL_OK)
+    {
+      return;
+    }
+
+    id = (rx_header.IDE == CAN_ID_EXT) ? rx_header.ExtId : rx_header.StdId;
+    (void)CanRxQueue_Push(&driver->rx_queue, id, data, (uint8_t)rx_header.DLC);
+  }
+}
+
+void CanDriver_ProcessRx(CanDriver_t *driver)
+{
+  CanRxFrame_t frame;
+
+  if ((driver == NULL) || (driver->rx_callback == NULL))
   {
     return;
   }
 
-  id = (rx_header.IDE == CAN_ID_EXT) ? rx_header.ExtId : rx_header.StdId;
-
-  if (driver->rx_callback != NULL)
+  while (CanRxQueue_Pop(&driver->rx_queue, &frame))
   {
-    driver->rx_callback(id, data, rx_header.DLC);
+    driver->rx_callback(frame.id, frame.data, frame.length);
   }
 }
 

@@ -24,14 +24,24 @@ int main(void)
   CHECK(payload[0] == 0x03U);
   CHECK(payload[1] == 0x0AU);
   CHECK(payload[99] == (uint8_t)((99U * 7U + 3U) & 0xFFU));
-  CHECK(IsotpBench_ValidatePayload(payload, sizeof(payload), &bad_index));
+  CHECK(IsotpBench_ValidatePayload(payload, sizeof(payload),
+                                   ISOTP_BENCH_PAYLOAD_SIZE, &bad_index));
   CHECK(bad_index == 0xFFFFU);
 
   payload[42] ^= 0x5AU;
-  CHECK(!IsotpBench_ValidatePayload(payload, sizeof(payload), &bad_index));
+  CHECK(!IsotpBench_ValidatePayload(payload, sizeof(payload),
+                                    ISOTP_BENCH_PAYLOAD_SIZE, &bad_index));
   CHECK(bad_index == 42U);
 
-  CHECK(!IsotpBench_ValidatePayload(payload, 7U, &bad_index));
+  CHECK(!IsotpBench_ValidatePayload(payload, 7U,
+                                    ISOTP_BENCH_PAYLOAD_SIZE, &bad_index));
+
+  {
+    uint8_t payload_120[120];
+    IsotpBench_BuildPayload(payload_120, sizeof(payload_120));
+    CHECK(IsotpBench_ValidatePayload(payload_120, sizeof(payload_120),
+                                     sizeof(payload_120), &bad_index));
+  }
 
   {
     uint8_t status_frame[8] = {0};

@@ -131,8 +131,8 @@ class IsoTpTransport:
         rxid: int,
         timeout: float = 2.0,
         padding: int = DEFAULT_PADDING,
-        stmin_ms: int = 0,
-        block_size: int = 0,
+        stmin_ms: int = 20,
+        block_size: int = 8,
         is_extended_id: bool = False,
     ) -> None:
         self.bus = bus
@@ -245,6 +245,8 @@ class IsoTpTransport:
             raise ValueError(f"unexpected PCI type {pci_type} while receiving")
 
         total_length = ((message.data[0] & 0x0F) << 8) | message.data[1]
+        if total_length <= MAX_SF_LENGTH:
+            raise ValueError("invalid first frame total length")
         payload = bytearray(message.data[2 : 2 + MAX_FF_LENGTH])
         expected_index = 1
 
@@ -256,10 +258,15 @@ class IsoTpTransport:
         block_count = 0
         while len(payload) < total_length:
             frame = self._wait_frame(
-                lambda m: (m.data[0] >> 4) & 0x0F == PCI_CF
-                and m.data[0] & 0x0F == expected_index,
+                lambda m: (m.data[0] >> 4) & 0x0F == PCI_CF,
                 remaining(),
             )
+            sequence_index = frame.data[0] & 0x0F
+            if sequence_index != expected_index:
+                raise ValueError(
+                    f"unexpected CF sequence index 0x{sequence_index:X}, "
+                    f"expected 0x{expected_index:X}"
+                )
             payload.extend(frame.data[1:])
             expected_index = (expected_index + 1) % 16
             block_count += 1

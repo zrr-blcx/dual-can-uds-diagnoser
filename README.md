@@ -23,8 +23,9 @@
   register-level WWDG with stop-refresh and early-refresh self-tests.
 - Week 3 ISO-TP: portable SF/FF/CF/FC state machines, BS/STmin flow control,
   transmit-completion-aware timeouts, UDS request/response routing, and
-  100-byte bench modes. Bidirectional F407/F103 hardware transfer passed with
-  BS=8, STmin=20 ms, 14 CF, 2 FC, and zero receiver validation errors.
+  100-byte bench modes. The software core, host tests, final bidirectional
+  hardware revalidation, negative fault tests and formal UDS regression pass.
+  The Week 3 milestone is complete.
 - Acceptance metrics below are targets until measured on real hardware.
 
 ## 核心能力
@@ -107,6 +108,13 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 
 第 3 周 ISO-TP 设计、测试和当前硬件结论见
 [docs/isotp_week3.md](docs/isotp_week3.md)。
+
+协议参数与验收契约见
+[docs/isotp_protocol_contract.md](docs/isotp_protocol_contract.md)。
+代表性 ISO-TP 帧样例见
+[docs/isotp_frame_examples.md](docs/isotp_frame_examples.md)。
+原始计划与证据对照见
+[docs/isotp_acceptance_matrix.md](docs/isotp_acceptance_matrix.md)。
 
 通用开发环境：
 

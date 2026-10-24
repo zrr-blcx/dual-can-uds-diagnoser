@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "can_health.h"
+#include "can_rx_queue.h"
 
 #if defined(STM32F103xB)
 #include "stm32f1xx_hal.h"
@@ -48,6 +49,7 @@ typedef struct
   uint32_t time_seg1;
   uint32_t time_seg2;
   uint32_t filter_bank;
+  CanRxQueue_t rx_queue;
 } CanDriver_t;
 
 HAL_StatusTypeDef CanDriver_Init(CanDriver_t *driver,
@@ -69,6 +71,9 @@ HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
 bool CanDriver_IsTxPending(const CanDriver_t *driver);
 
 void CanDriver_RxIrqHandler(CanDriver_t *driver);
+
+/* Drain received CAN frames and invoke the callback from the main loop. */
+void CanDriver_ProcessRx(CanDriver_t *driver);
 
 /* Wire the error/Bus-Off policy core; optional, but then errors are only
    counted by the HAL itself. */

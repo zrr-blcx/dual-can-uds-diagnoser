@@ -73,7 +73,10 @@ Application
   -> STM32 HAL
 ```
 
-Status: Week 1 CAN baseline, Week 2 health/Bus-Off work, and Week 3 ISO-TP are
-complete. Both F407/F103 100-byte directions passed on hardware, and both
-formal images passed single-frame and 20-byte multi-frame UDS regression.
-See `docs/isotp_week3.md` and `docs/ROADMAP.md`.
+Status: Week 1 CAN baseline and Week 2 health/Bus-Off work are complete. The
+Week 3 ISO-TP software core, CAN RX queue, error-state handling, and host tests
+are implemented. Final candidate bidirectional hardware and formal UDS regression
+pass, including wrong-SN recovery, 120-byte SN wrap and timeout injection.
+The Week 3 milestone is complete. See
+`docs/isotp_protocol_contract.md`, `docs/isotp_week3.md`, and
+`docs/ROADMAP.md`.

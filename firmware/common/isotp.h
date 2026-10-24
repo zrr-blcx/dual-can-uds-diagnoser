@@ -135,9 +135,12 @@ typedef struct
   uint16_t tx_sent_in_block;/* CFs sent since the last FC */
   uint32_t tx_deadline_ms;  /* active N_As/N_Bs/N_Cr deadline */
   uint32_t tx_as_deadline_ms;
+  uint32_t tx_enqueue_deadline_ms;
   uint32_t tx_last_cf_ms;   /* tick of the last CF, for STmin spacing */
+  uint8_t tx_pending_frame[ISOTP_CAN_DLC];
   bool tx_ff_sent;
   bool tx_has_sent_cf;
+  bool tx_waiting_enqueue;
   bool tx_waiting_fc;       /* waiting for the first or a subsequent FC */
   bool tx_waiting_after_block;
   bool tx_frame_pending;
@@ -170,6 +173,7 @@ typedef struct
   uint32_t rxid;
   uint16_t n_ar_ms;
   uint16_t n_cr_ms;
+  uint8_t fc_frame[ISOTP_CAN_DLC];
   uint8_t padding;
   uint8_t block_size;   /* BS value we advertise in FC frames */
   uint8_t stmin_ms;     /* STmin value we advertise in FC frames */
@@ -184,6 +188,7 @@ typedef struct
   uint32_t fc_deadline_ms;  /* N_Ar anchor for FC transmission */
   bool rx_in_progress;
   bool rx_timed_out;
+  bool fc_waiting_enqueue;
   bool fc_pending;
   /* Complete payload waiting for the application to consume. */
   bool message_ready;

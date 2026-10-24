@@ -18,6 +18,10 @@
   - `Isotp_RouteFrame()` 按 PCI 类型把 FC 路由到发送端，把 SF/FF/CF
     路由到接收端。
   - CAN 通道提供发送完成回调，用于真实 `N_As`/`N_Ar` 判定。
+  - 发送邮箱暂时忙时保留待入队帧，在 `N_As/N_Ar` 内重试。
+- `firmware/common/can_rx_queue.c/.h`
+  - CAN 中断只把原始帧写入单生产者/单消费者环形队列。
+  - 主循环统一分发 SF/FF/CF/FC，避免在 ISR 中执行 TP 或 UDS。
 - `firmware/common/isotp_bench.c/.h`
   - 生成固定 100 字节图案。
   - 接收端逐字节校验并返回一个 ISO-TP SF 状态帧。
@@ -64,7 +68,7 @@ py -3.14 -m pytest tests\test_firmware_isotp.py tests\test_isotp_flowcontrol.py 
 py -3.14 -m pytest -p no:cacheprovider
 ```
 
-结果：`86 passed`。
+结果：`100 passed`。
 
 固件构建：
 
@@ -93,13 +97,20 @@ powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -IsotpBench
   `rx_messages=3`、`rx_errors=0`。
 - F103 正式镜像 `10 03` 响应时间 `2.1 ms`。
 - F103 正式镜像读取 `0xF190` 的 20 字节多帧响应成功，耗时 `28.1 ms`。
-- F407 -> F103：100 字节一致，14 CF、2 FC、BS=8、STmin=20 ms，
-  最小 CF 间隔 `21.811 ms`；F103 接收计数 `19`、错误 `0`。
-- F103 -> F407：100 字节一致，14 CF、2 FC、BS=8、STmin=20 ms，
-  最小 CF 间隔 `21.845 ms`；F407 接收计数 `28`、错误 `0`。
+- 最终候选 F407 -> F103：100 字节一致，14 CF、2 FC、BS=8、STmin=20 ms，
+  最小 CF 间隔 `21.845 ms`；F103 接收计数 `22`、错误 `0`。
+- 最终候选 F103 -> F407：100 字节一致，14 CF、2 FC、BS=8、STmin=20 ms，
+  最小 CF 间隔 `21.839 ms`；F407 接收计数 `21`、错误 `0`。
 - 双向接收端均连续返回状态 SF `0x5A`。
 - 两节点正式镜像恢复后：
-  - F407 `10 03` 为 `2.9 ms`，`22 F190` 为 `27.3 ms`。
-  - F103 `10 03` 为 `8.8 ms`，`22 F190` 为 `26.1 ms`。
+  - F407 `10 03` 为 `9.5 ms`，`22 F190` 为 `39.9 ms`。
+  - F103 `10 03` 为 `2.0 ms`，`22 F190` 为 `42.1 ms`。
+- 错误 SN 注入后 `rx_errors=1`，下一次合法 100 字节恢复成功。
+- 双向 120 字节均产生 17 CF、3 FC，并观测到 SN `0xF -> 0x0`。
+- `N_Bs/N_Cr` 通过 CANable 停止 FC/CF 验证；`N_As/N_Ar` 通过最终固件的
+  强制发送忙开关验证，超时计数均增加。
 
-第 3 周 ISO-TP 里程碑已完成。
+协议契约见 `docs/isotp_protocol_contract.md`。最终候选软件、主机测试、
+双向 100 字节、负向故障注入和正式 UDS 回归均通过，第 3 周里程碑完成。
+
+最终候选代表性 FF/FC/CF/状态帧见 `docs/isotp_frame_examples.md`。

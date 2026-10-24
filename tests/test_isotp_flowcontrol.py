@@ -12,6 +12,7 @@ import threading
 import time
 
 import can
+import pytest
 
 from diagnoser.transport.isotp import (
     FC_CTS,
@@ -67,6 +68,18 @@ def _make_transport(bus: ScriptedBus, block_size: int = 8, stmin_ms: int = 0) ->
         stmin_ms=stmin_ms,
         block_size=block_size,
     )
+
+
+def test_transport_defaults_match_firmware_contract() -> None:
+    tx = IsoTpTransport(
+        ScriptedBus(),
+        txid=0x7E0,
+        rxid=0x7E8,
+        timeout=0.5,
+    )
+
+    assert tx.block_size == 8
+    assert tx.stmin_ms == 20
 
 
 def test_send_waits_for_fc_at_each_block() -> None:
@@ -149,6 +162,28 @@ def test_receive_advertises_two_blocks() -> None:
             assert fc.data[1] == 8  # BS advertised
     finally:
         t.join(timeout=1.0)
+
+
+def test_receive_rejects_short_first_frame() -> None:
+    bus = ScriptedBus()
+    rx = _make_transport(bus, block_size=8, stmin_ms=20)
+    short_ff = bytes([PCI_FF << 4, 7, 1, 2, 3, 4, 5, 6])
+    bus.incoming.put(can.Message(arbitration_id=0x7E8, data=short_ff))
+
+    with pytest.raises(ValueError, match="first frame"):
+        rx.receive(timeout=0.1)
+
+
+def test_receive_rejects_wrong_consecutive_sequence() -> None:
+    bus = ScriptedBus()
+    rx = _make_transport(bus, block_size=8, stmin_ms=0)
+    frames = pack_message(bytes(range(20)))
+    wrong_cf = bytes([(PCI_CF << 4) | 2]) + frames[1][1:]
+    bus.incoming.put(can.Message(arbitration_id=0x7E8, data=frames[0]))
+    bus.incoming.put(can.Message(arbitration_id=0x7E8, data=wrong_cf))
+
+    with pytest.raises(ValueError, match="sequence"):
+        rx.receive(timeout=0.1)
 
 
 def test_send_aborts_on_overflow_fc() -> None:

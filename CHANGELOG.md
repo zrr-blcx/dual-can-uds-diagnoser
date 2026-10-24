@@ -61,9 +61,15 @@
 - Add compile-time `-IsotpBenchTx`/`-IsotpBenchRx` firmware modes and a fixed
   100-byte payload for hardware acceptance.
 - Add ISO-TP trace summarization and correct the Python FC.WAIT deadline.
-- Verify bidirectional F407/F103 100-byte transfers at BS=8 and STmin=20 ms,
-  including cross-block STmin spacing, then restore and regress both formal
-  images with single-frame and multi-frame UDS.
+- Record preliminary bidirectional F407/F103 100-byte results at BS=8 and
+  STmin=20 ms. Final acceptance was reopened after queue, error-state and
+  mailbox-retry hardening.
+- Add a portable ISR-to-main CAN RX queue, stricter SF/FF/SN validation,
+  BS=0 support, mailbox-busy retries, tick-wrap coverage, and project-default
+  Python flow-control parameters.
+- Add configurable 100/120-byte bench payloads and target-side ISO-TP test
+  counters. Verify wrong-SN recovery, bidirectional SN wrap, and
+  `N_As/N_Bs/N_Cr/N_Ar` timeout paths on hardware.
 - Validate a physical CANH-CANL fault: 3 Bus-Off events and 3/3 automatic
   recoveries, with no recovery-chain reset request.
 - Verify the sustained-fault escalation path: three consecutive recovery

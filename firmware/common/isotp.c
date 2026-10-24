@@ -44,6 +44,44 @@ static void isotp_note_frame_sent(IsotpTx_t *tx, uint32_t now_ms)
   tx->tx_as_deadline_ms = now_ms + tx->n_as_ms;
 }
 
+static IsotpResult_t isotp_tx_service_enqueue(IsotpTx_t *tx, uint32_t now_ms)
+{
+  if (!tx->tx_waiting_enqueue)
+  {
+    return ISOTP_OK;
+  }
+
+  if ((tx->channel.send != NULL) &&
+      tx->channel.send(tx->channel.ctx, tx->txid, tx->tx_pending_frame))
+  {
+    tx->tx_waiting_enqueue = false;
+    isotp_note_frame_sent(tx, now_ms);
+    return ISOTP_OK;
+  }
+
+  if ((now_ms - tx->tx_enqueue_deadline_ms) < 0x80000000U)
+  {
+    tx->tx_waiting_enqueue = false;
+    tx->tx_ongoing = false;
+    return ISOTP_ERR_TIMEOUT;
+  }
+  return ISOTP_OK;
+}
+
+static bool isotp_tx_schedule_frame(IsotpTx_t *tx, const uint8_t frame[ISOTP_CAN_DLC])
+{
+  if (tx->channel.send == NULL)
+  {
+    return false;
+  }
+
+  memcpy(tx->tx_pending_frame, frame, ISOTP_CAN_DLC);
+  tx->tx_waiting_enqueue = true;
+  tx->tx_enqueue_deadline_ms = isotp_tick(&tx->channel) + tx->n_as_ms;
+  (void)isotp_tx_service_enqueue(tx, isotp_tick(&tx->channel));
+  return true;
+}
+
 static bool isotp_send_sf(IsotpTx_t *tx, const uint8_t *data, uint16_t len)
 {
   uint8_t frame[ISOTP_CAN_DLC];
@@ -59,14 +97,8 @@ static bool isotp_send_sf(IsotpTx_t *tx, const uint8_t *data, uint16_t len)
     frame[i] = tx->padding;
   }
 
-  if ((tx->channel.send == NULL) ||
-      !tx->channel.send(tx->channel.ctx, tx->txid, frame))
-  {
-    return false;
-  }
   tx->tx_offset = len;
-  isotp_note_frame_sent(tx, isotp_tick(&tx->channel));
-  return true;
+  return isotp_tx_schedule_frame(tx, frame);
 }
 
 static bool isotp_send_ff(IsotpTx_t *tx)
@@ -91,18 +123,12 @@ static bool isotp_send_ff(IsotpTx_t *tx)
     frame[i] = tx->padding;
   }
 
-  if ((tx->channel.send == NULL) ||
-      !tx->channel.send(tx->channel.ctx, tx->txid, frame))
-  {
-    return false;
-  }
   tx->tx_offset = chunk;
   tx->tx_ff_sent = true;
   tx->tx_waiting_fc = true;
   tx->tx_waiting_after_block = false;
   tx->tx_deadline_ms = isotp_tick(&tx->channel) + tx->n_bs_ms;
-  isotp_note_frame_sent(tx, isotp_tick(&tx->channel));
-  return true;
+  return isotp_tx_schedule_frame(tx, frame);
 }
 
 static bool isotp_send_cf(IsotpTx_t *tx, uint32_t now_ms)
@@ -127,19 +153,43 @@ static bool isotp_send_cf(IsotpTx_t *tx, uint32_t now_ms)
     frame[i] = tx->padding;
   }
 
-  if ((tx->channel.send == NULL) ||
-      !tx->channel.send(tx->channel.ctx, tx->txid, frame))
-  {
-    return false;
-  }
-
   tx->tx_offset += chunk;
   tx->tx_sn = (uint8_t)((tx->tx_sn + 1U) & ISOTP_SEQ_MASK);
   tx->tx_sent_in_block++;
   tx->tx_has_sent_cf = true;
   tx->tx_last_cf_ms = now_ms;
-  isotp_note_frame_sent(tx, now_ms);
-  return true;
+  return isotp_tx_schedule_frame(tx, frame);
+}
+
+static IsotpResult_t isotp_rx_service_fc_enqueue(IsotpRx_t *rx, uint32_t now_ms)
+{
+  if (!rx->fc_waiting_enqueue)
+  {
+    return ISOTP_OK;
+  }
+
+  if ((rx->channel.send != NULL) &&
+      rx->channel.send(rx->channel.ctx, rx->txid, rx->fc_frame))
+  {
+    rx->fc_waiting_enqueue = false;
+    rx->fc_pending = (rx->channel.tx_pending != NULL) &&
+                     rx->channel.tx_pending(rx->channel.ctx);
+    rx->fc_deadline_ms = now_ms + rx->n_ar_ms;
+    if (!rx->fc_pending)
+    {
+      rx->rx_deadline_ms = now_ms + rx->n_cr_ms;
+    }
+    return ISOTP_OK;
+  }
+
+  if ((now_ms - rx->fc_deadline_ms) < 0x80000000U)
+  {
+    rx->fc_waiting_enqueue = false;
+    rx->rx_in_progress = false;
+    rx->rx_timed_out = true;
+    return ISOTP_ERR_TIMEOUT;
+  }
+  return ISOTP_OK;
 }
 
 static bool isotp_send_fc(IsotpRx_t *rx, uint8_t status)
@@ -155,19 +205,15 @@ static bool isotp_send_fc(IsotpRx_t *rx, uint8_t status)
     frame[i] = rx->padding;
   }
 
-  if ((rx->channel.send == NULL) ||
-      !rx->channel.send(rx->channel.ctx, rx->txid, frame))
+  if (rx->channel.send == NULL)
   {
     return false;
   }
 
-  rx->fc_pending = (rx->channel.tx_pending != NULL) &&
-                   rx->channel.tx_pending(rx->channel.ctx);
+  memcpy(rx->fc_frame, frame, ISOTP_CAN_DLC);
+  rx->fc_waiting_enqueue = true;
   rx->fc_deadline_ms = isotp_tick(&rx->channel) + rx->n_ar_ms;
-  if (!rx->fc_pending)
-  {
-    rx->rx_deadline_ms = isotp_tick(&rx->channel) + rx->n_cr_ms;
-  }
+  (void)isotp_rx_service_fc_enqueue(rx, isotp_tick(&rx->channel));
   return true;
 }
 
@@ -218,8 +264,10 @@ void IsotpTx_Init(IsotpTx_t *tx, const IsotpChannel_t *channel, const IsotpConfi
   tx->tx_sent_in_block = 0U;
   tx->tx_deadline_ms = 0U;
   tx->tx_as_deadline_ms = 0U;
+  tx->tx_enqueue_deadline_ms = 0U;
   tx->tx_ff_sent = false;
   tx->tx_has_sent_cf = false;
+  tx->tx_waiting_enqueue = false;
   tx->tx_waiting_fc = false;
   tx->tx_waiting_after_block = false;
   tx->tx_frame_pending = false;
@@ -238,7 +286,7 @@ void IsotpRx_Init(IsotpRx_t *rx, const IsotpChannel_t *channel, const IsotpConfi
   rx->n_ar_ms = config->n_ar_ms ? config->n_ar_ms : ISOTP_DEFAULT_N_AR_MS;
   rx->n_cr_ms = config->n_cr_ms ? config->n_cr_ms : ISOTP_DEFAULT_N_CR_MS;
   rx->padding = config->padding ? config->padding : ISOTP_DEFAULT_PADDING;
-  rx->block_size = config->block_size ? config->block_size : ISOTP_DEFAULT_BLOCK_SIZE;
+  rx->block_size = config->block_size;
   rx->stmin_ms = config->stmin_ms;
 
   if ((config->rx_buffer != NULL) && (config->rx_buffer_size > 0U))
@@ -266,6 +314,7 @@ void IsotpRx_Init(IsotpRx_t *rx, const IsotpChannel_t *channel, const IsotpConfi
   rx->fc_deadline_ms = 0U;
   rx->rx_in_progress = false;
   rx->rx_timed_out = false;
+  rx->fc_waiting_enqueue = false;
   rx->fc_pending = false;
   rx->message_ready = false;
   rx->message_length = 0U;
@@ -294,11 +343,13 @@ IsotpResult_t IsotpTx_Start(IsotpTx_t *tx, const uint8_t *data, uint16_t len)
   tx->tx_sent_in_block = 0U;
   tx->tx_ff_sent = false;
   tx->tx_has_sent_cf = false;
+  tx->tx_waiting_enqueue = false;
   tx->tx_waiting_fc = false;
   tx->tx_waiting_after_block = false;
   tx->tx_frame_pending = false;
   tx->tx_last_cf_ms = 0U;
   tx->tx_as_deadline_ms = 0U;
+  tx->tx_enqueue_deadline_ms = 0U;
   tx->tx_ongoing = true;
 
   if (len <= ISOTP_MAX_SINGLE_FRAME)
@@ -308,7 +359,7 @@ IsotpResult_t IsotpTx_Start(IsotpTx_t *tx, const uint8_t *data, uint16_t len)
       tx->tx_ongoing = false;
       return ISOTP_ERR_STATE;
     }
-    if (!tx->tx_frame_pending)
+    if (!tx->tx_frame_pending && !tx->tx_waiting_enqueue)
     {
       tx->tx_ongoing = false;
     }
@@ -394,6 +445,16 @@ IsotpResult_t IsotpTx_Poll(IsotpTx_t *tx)
 
   now = isotp_tick(&tx->channel);
 
+  elapsed = 0U;
+  if (isotp_tx_service_enqueue(tx, now) == ISOTP_ERR_TIMEOUT)
+  {
+    return ISOTP_ERR_TIMEOUT;
+  }
+  if (tx->tx_waiting_enqueue)
+  {
+    return ISOTP_OK;
+  }
+
   if (tx->tx_frame_pending)
   {
     if (isotp_tx_pending(tx))
@@ -461,6 +522,7 @@ void IsotpTx_Reset(IsotpTx_t *tx)
   if (tx != NULL)
   {
     tx->tx_ongoing = false;
+    tx->tx_waiting_enqueue = false;
     tx->tx_waiting_fc = false;
     tx->tx_waiting_after_block = false;
     tx->tx_frame_pending = false;
@@ -489,9 +551,17 @@ IsotpResult_t IsotpRx_OnFrame(IsotpRx_t *rx, const uint8_t data[ISOTP_CAN_DLC])
   if (pci == ISOTP_PCI_SF)
   {
     uint8_t sf_len = (uint8_t)(data[0] & 0x0FU);
+    if (sf_len == 0U)
+    {
+      return ISOTP_ERR_INVALID;
+    }
     if (rx->rx_in_progress)
     {
       return ISOTP_ERR_INVALID; /* a multi-frame transfer is already in flight */
+    }
+    if (rx->message_ready)
+    {
+      return ISOTP_ERR_BUSY;
     }
     if (sf_len > ISOTP_SF_PAYLOAD_MAX)
     {
@@ -514,12 +584,20 @@ IsotpResult_t IsotpRx_OnFrame(IsotpRx_t *rx, const uint8_t data[ISOTP_CAN_DLC])
   {
     if (rx->rx_in_progress)
     {
+      IsotpRx_Reset(rx);
       return ISOTP_ERR_INVALID;
     }
-    declared = (uint16_t)(((data[0] & 0x0FU) << 8) | data[1]);
-    if (declared > ISOTP_MAX_TOTAL_LENGTH)
+    if (rx->message_ready)
     {
-      return ISOTP_ERR_TOO_LONG;
+      return ISOTP_ERR_BUSY;
+    }
+    declared = (uint16_t)(((data[0] & 0x0FU) << 8) | data[1]);
+    if ((declared <= ISOTP_MAX_SINGLE_FRAME) ||
+        (declared > ISOTP_MAX_TOTAL_LENGTH))
+    {
+      return (declared > ISOTP_MAX_TOTAL_LENGTH)
+                 ? ISOTP_ERR_TOO_LONG
+                 : ISOTP_ERR_INVALID;
     }
     if (rx->buffer == NULL)
     {
@@ -574,6 +652,7 @@ IsotpResult_t IsotpRx_OnFrame(IsotpRx_t *rx, const uint8_t data[ISOTP_CAN_DLC])
     sn = (uint8_t)(data[0] & 0x0FU);
     if (sn != rx->expected_sn)
     {
+      IsotpRx_Reset(rx);
       return ISOTP_ERR_INVALID; /* sequence number out of order */
     }
 
@@ -652,12 +731,26 @@ IsotpResult_t IsotpRx_Poll(IsotpRx_t *rx)
   {
     return ISOTP_ERR_INVALID;
   }
-  if (!rx->rx_in_progress)
+  if (!rx->rx_in_progress && !rx->fc_waiting_enqueue && !rx->fc_pending)
   {
     return ISOTP_OK;
   }
 
   now = isotp_tick(&rx->channel);
+
+  elapsed = 0U;
+  if (isotp_rx_service_fc_enqueue(rx, now) == ISOTP_ERR_TIMEOUT)
+  {
+    return ISOTP_ERR_TIMEOUT;
+  }
+  if (rx->fc_waiting_enqueue)
+  {
+    return ISOTP_OK;
+  }
+  if (!rx->rx_in_progress)
+  {
+    return ISOTP_OK;
+  }
 
   if (rx->fc_pending)
   {
@@ -731,6 +824,7 @@ void IsotpRx_Reset(IsotpRx_t *rx)
   {
     rx->rx_in_progress = false;
     rx->rx_timed_out = false;
+    rx->fc_waiting_enqueue = false;
     rx->fc_pending = false;
     rx->message_ready = false;
     rx->message_length = 0U;

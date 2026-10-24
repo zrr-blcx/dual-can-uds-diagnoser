@@ -98,7 +98,7 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-04 | 3.12.13 (`.venv`) | `python -m pytest` | `48 passed`, 1 cache-permission warning |
 | 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
 | 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
-| 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `86 passed` |
+| 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `100 passed` |
 
 The `py` launcher was unavailable in the current Windows shell, so the project
 virtual environment was used for the complete regression. The warning came from
@@ -316,6 +316,8 @@ and running bidirectional F407/F103 100-byte transfers plus CANable capture.
 | Test | Expected | Result |
 | --- | --- | --- |
 | Single frame (SF) round trip | 3-byte payload preserved | PASS |
+| Invalid frames | Zero-length SF and declared FF length <=7 rejected | PASS |
+| Unread message | New SF/FF does not overwrite a complete unread message | PASS |
 | Multi-frame 100 B, BS=8, STmin=20 ms | FF + 14 CF reassembled intact | PASS |
 | SN wraparound 120 B | 17 CF, SN hits `0x0F` then `0x00` | PASS |
 | FC direction | Request `0x7E0` -> FC emitted on response `0x7E8` | PASS |
@@ -329,6 +331,10 @@ and running bidirectional F407/F103 100-byte transfers plus CANable capture.
 | FC WAIT | Sender keeps waiting, refreshed deadline | PASS |
 | FC OVERFLOW | Sender aborts the transfer | PASS |
 | STmin spacing | CFs spaced by the peer's STmin, including across BS blocks | PASS |
+| BS=0 | Receiver advertises one full-transfer grant | PASS |
+| CAN mailbox busy | FF/CF and FC retry within their timeout window | PASS |
+| Tick wrap | Timeout arithmetic works across 32-bit wrap | PASS |
+| CAN RX queue | ISR producer/main consumer order and overflow policy | PASS |
 | Bench payload | Fixed 100-byte sender pattern and receiver validation | PASS |
 | Trace summary | 14 CF, 2 FC, BS/STmin and reassembled payload extracted | PASS |
 
@@ -341,8 +347,8 @@ Firmware builds now include the ISO-TP core on both targets:
 
 | Date | Target | Toolchain | Artifact | Result |
 | --- | --- | --- | --- | --- |
-| 2026-10-24 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, text 25356 B, bss 8292 B |
-| 2026-10-24 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 23800 B, bss 8292 B |
+| 2026-10-24 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, text 26628 B, bss 8620 B |
+| 2026-10-24 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 25068 B, bss 8620 B |
 
 Both `main.c` files route `0x7E0/0x7E8` (F407) and `0x7E1/0x7E9` (F103) request
 frames into the ISO-TP receiver, feed complete requests to the UDS server, and
@@ -350,22 +356,42 @@ send responses back out through the ISO-TP sender. Compile-time bench modes
 (`-IsotpBenchTx` / `-IsotpBenchRx`) exchange the fixed 100-byte payload without
 using the UDS parser.
 
-### Dual-Node Hardware Result
+### Dual-Node Hardware Result (Final Candidate)
 
 | Test | Result |
 | --- | --- |
 | F407 -> F103, 100-byte payload | PASS, 14 CF, 2 FC, 5 x status `0x5A` |
-| F407 -> F103 CF gap | Minimum `21.811 ms` |
-| F407 -> F103 receiver counters | `rx_messages=19`, `rx_errors=0` |
+| F407 -> F103 CF gap | Minimum `21.845 ms` |
+| F407 -> F103 receiver counters | `rx_messages=22`, `rx_errors=0` |
 | F103 -> F407, 100-byte payload | PASS, 14 CF, 2 FC, 5 x status `0x5A` |
-| F103 -> F407 CF gap | Minimum `21.845 ms` |
-| F103 -> F407 receiver counters | `rx_messages=28`, `rx_errors=0` |
+| F103 -> F407 CF gap | Minimum `21.839 ms` |
+| F103 -> F407 receiver counters | `rx_messages=21`, `rx_errors=0` |
 | FC settings in both directions | BS=8, STmin=20 ms |
-| F407 formal `10 03` / `22 F190` | PASS, `2.9 ms` / `27.3 ms` |
-| F103 formal `10 03` / `22 F190` | PASS, `8.8 ms` / `26.1 ms` |
+| F407 formal `10 03` / `22 F190` | PASS, `9.5 ms` / `39.9 ms` |
+| F103 formal `10 03` / `22 F190` | PASS, `2.0 ms` / `42.1 ms` |
 
 Both bench images and then both formal images were flashed and verified with
-STM32CubeProgrammer. The formal images were restored after the test.
+STM32CubeProgrammer. These measurements include the CAN RX queue, stricter
+receive-state validation, mailbox retry and BS=0 fixes.
+
+### Negative Hardware Validation
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Wrong SN then valid transfer | Error once, reset, next transfer succeeds | PASS: `rx_errors=1`, recovery status `0x5A` |
+| F407 -> F103, 120 bytes | 17 CF, 3 FC, SN `0xF -> 0x0` | PASS |
+| F103 -> F407, 120 bytes | 17 CF, 3 FC, SN `0xF -> 0x0` | PASS |
+| `N_Bs` with no FC | Sender TX timeout increases | PASS |
+| `N_Cr` sender with no next block FC | Sender TX timeout increases | PASS |
+| `N_Cr` receiver after stopping CF | Receiver RX timeout increases | PASS: `rx_timeouts=1` |
+| `N_As` with forced transmit-busy | Sender TX timeout increases | PASS: `tx_timeouts=12` |
+| `N_Ar` with forced FC transmit-busy | Receiver RX timeout increases | PASS: `rx_timeouts=1` |
+
+The `N_As/N_Ar` cases use a test-image switch that forces the CAN send callback
+to report busy. This exercises the real firmware timeout state machines with
+`HAL_GetTick()` while avoiding the unstable and indirect "remove ACK" setup.
+After the tests, both normal images were restored and passed `10 03` and
+multi-frame `22 F190`.
 
 ## Conclusion
 
