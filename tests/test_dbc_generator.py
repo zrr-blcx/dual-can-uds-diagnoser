@@ -60,7 +60,7 @@ def test_c_struct_generation() -> None:
 
 
 def test_signal_encode_decode_roundtrip_big_endian() -> None:
-    signal = CanSignal("Speed", 0, 16, "big_endian", 0.25, 0.0)
+    signal = CanSignal("Speed", 7, 16, "big_endian", 0.25, 0.0)
     data = bytearray(8)
     encode_signal(data, signal.start_bit, signal.length, 1000, signal.byte_order)
     assert decode_signal(bytes(data), signal.start_bit, signal.length, signal.byte_order) == 1000
@@ -71,5 +71,11 @@ def test_signal_encode_decode_roundtrip_little_endian() -> None:
     data = bytearray(8)
     encode_signal(data, signal.start_bit, signal.length, 0xABC, signal.byte_order)
     assert decode_signal(bytes(data), signal.start_bit, signal.length, signal.byte_order) == 0xABC
+
+
+def test_dbc_byte_order_tokens_match_dbc_convention() -> None:
+    text = DbcGenerator.generate(_network())
+    assert "EngineSpeed : 0|16@0+" in text
+    assert "VehicleSpeed : 0|16@1+" in text
 
 

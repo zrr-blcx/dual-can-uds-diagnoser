@@ -1,0 +1,83 @@
+VERSION "Project2 diagnostic and application"
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: Tester ECU_F407 ECU_F103
+
+BO_ 2016 DiagnosticRequest_ECU1: 8 Tester
+ SG_ PciByte0 : 0|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte1 : 8|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte2 : 16|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte3 : 24|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte4 : 32|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte5 : 40|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte6 : 48|8@1+ (1,0) [0|255] "" ECU_F407
+ SG_ PciByte7 : 56|8@1+ (1,0) [0|255] "" ECU_F407
+
+BO_ 2024 DiagnosticResponse_ECU1: 8 ECU_F407
+ SG_ PciByte0 : 0|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte1 : 8|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte2 : 16|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte3 : 24|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte4 : 32|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte5 : 40|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte6 : 48|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte7 : 56|8@1+ (1,0) [0|255] "" Tester
+
+BO_ 2017 DiagnosticRequest_ECU2: 8 Tester
+ SG_ PciByte0 : 0|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte1 : 8|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte2 : 16|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte3 : 24|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte4 : 32|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte5 : 40|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte6 : 48|8@1+ (1,0) [0|255] "" ECU_F103
+ SG_ PciByte7 : 56|8@1+ (1,0) [0|255] "" ECU_F103
+
+BO_ 2025 DiagnosticResponse_ECU2: 8 ECU_F103
+ SG_ PciByte0 : 0|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte1 : 8|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte2 : 16|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte3 : 24|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte4 : 32|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte5 : 40|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte6 : 48|8@1+ (1,0) [0|255] "" Tester
+ SG_ PciByte7 : 56|8@1+ (1,0) [0|255] "" Tester
+
+BO_ 384 EngineData: 8 ECU_F407
+ SG_ EngineSpeed : 7|16@0+ (0.25,0) [0|16383.75] "rpm" ECU_F407
+ SG_ CoolantTemp : 23|8@0+ (1,-40) [-40|215] "degC" ECU_F407
+
+BO_ 640 VehicleStatus: 8 ECU_F103
+ SG_ VehicleSpeed : 0|16@1+ (0.01,0) [0|655.35] "km/h" ECU_F103
+ SG_ BrakeActive : 16|1@1+ (1,0) [0|1] "" ECU_F103

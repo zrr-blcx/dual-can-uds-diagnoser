@@ -17,11 +17,14 @@ def decode_signal(
         raw = int.from_bytes(data[first_byte:], "little") >> offset
         return raw & ((1 << length) - 1)
 
+    # DBC Motorola start bits use sawtooth numbering. Convert to network
+    # numbering (bit 0 = MSB of byte 0) before walking consecutive bits.
+    network_start = 8 * (start_bit // 8) + (7 - (start_bit % 8))
     value = 0
     for i in range(length):
-        position = start_bit + i
-        byte = data[position // 8]
-        bit = 7 - (position % 8)
+        network_bit = network_start + i
+        byte = data[network_bit // 8]
+        bit = 7 - (network_bit % 8)
         value = (value << 1) | ((byte >> bit) & 1)
     return value
 
@@ -48,12 +51,13 @@ def encode_signal(
                 data[byte_index] &= ~(1 << bit_in_byte)
         return
 
+    network_start = 8 * (start_bit // 8) + (7 - (start_bit % 8))
     for i in range(length):
-        position = start_bit + i
-        byte_index = position // 8
+        network_bit = network_start + i
+        byte_index = network_bit // 8
         if byte_index >= len(data):
             break
-        bit_in_byte = 7 - (position % 8)
+        bit_in_byte = 7 - (network_bit % 8)
         value_bit = (value >> (length - 1 - i)) & 1
         if value_bit:
             data[byte_index] |= 1 << bit_in_byte

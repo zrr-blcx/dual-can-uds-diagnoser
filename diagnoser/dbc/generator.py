@@ -118,7 +118,7 @@ class DbcGenerator:
 
     @staticmethod
     def _signal_line(signal: CanSignal) -> str:
-        byte_order = "1" if signal.byte_order == "big_endian" else "0"
+        byte_order = "0" if signal.byte_order == "big_endian" else "1"
         signed = "+" if not signal.is_signed else "-"
         name = _sanitize_name(signal.name)
         return (
