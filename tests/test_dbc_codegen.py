@@ -8,7 +8,7 @@ import cantools
 import pytest
 
 from diagnoser.dbc.codegen import DbcCodeGenerator
-from tests.host_c_build import build_host_binary, run_host_binary
+from host_c_build import build_host_binary, run_host_binary
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DBC_PATH = PROJECT_ROOT / "dbc" / "project.dbc"
