@@ -11,20 +11,19 @@
 
 $ErrorActionPreference = 'Stop'
 
-$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $MyInvocation.MyCommand.Path)).Path
+$repoRoot = Split-Path -Parent (Split-Path -Parent $projectRoot)
+. (Join-Path $repoRoot 'firmware/common/toolchain.ps1')
+$toolchain = Resolve-ArmGccToolchain
 $buildDir = Join-Path $projectRoot 'Build'
-$toolRoot = 'E:\ST\STM32CubeIDE_2.1.0\STM32CubeIDE\plugins'
-$gccBin = Join-Path $toolRoot 'com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin'
-$gcc = Join-Path $gccBin 'arm-none-eabi-gcc.exe'
-$objcopy = Join-Path $gccBin 'arm-none-eabi-objcopy.exe'
-$size = Join-Path $gccBin 'arm-none-eabi-size.exe'
+$gcc = $toolchain.Gcc
+$objcopy = $toolchain.Objcopy
+$size = $toolchain.Size
 $linker = Join-Path $projectRoot 'STM32F407ZGTX_FLASH.ld'
 $elf = Join-Path $buildDir 'ecu-f407.elf'
 $map = Join-Path $buildDir 'ecu-f407.map'
 
-if (-not (Test-Path -LiteralPath $gcc -PathType Leaf)) {
-    throw "ARM GCC not found: $gcc"
-}
+Write-Host "TOOLCHAIN: $($toolchain.Bin)"
 
 if (Test-Path -LiteralPath $buildDir) {
     $resolvedBuild = (Resolve-Path -LiteralPath $buildDir).Path
@@ -44,12 +43,12 @@ $commonFlags = @(
     '-DDEBUG',
     '-DUSE_HAL_DRIVER',
     '-DSTM32F407xx',
-    "-I$(Join-Path $projectRoot 'Core\Inc')",
-    "-I$(Join-Path $projectRoot '..\common')",
-    "-I$(Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Inc')",
-    "-I$(Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Inc\Legacy')",
-    "-I$(Join-Path $projectRoot 'Drivers\CMSIS\Device\ST\STM32F4xx\Include')",
-    "-I$(Join-Path $projectRoot 'Drivers\CMSIS\Include')",
+    "-I$(Join-Path $projectRoot 'Core/Inc')",
+    "-I$(Join-Path $repoRoot 'firmware/common')",
+    "-I$(Join-Path $projectRoot 'Drivers/STM32F4xx_HAL_Driver/Inc')",
+    "-I$(Join-Path $projectRoot 'Drivers/STM32F4xx_HAL_Driver/Inc/Legacy')",
+    "-I$(Join-Path $projectRoot 'Drivers/CMSIS/Device/ST/STM32F4xx/Include')",
+    "-I$(Join-Path $projectRoot 'Drivers/CMSIS/Include')",
     '-O0',
     '-ffunction-sections',
     '-fdata-sections',
@@ -101,27 +100,30 @@ if ($WwdgEarlyFeedTest) {
 }
 
 $sources = @()
-$sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core\Src') -Filter '*.c' -File
-$sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Drivers\STM32F4xx_HAL_Driver\Src') -Filter '*.c' -File
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_driver.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_health.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\can_rx_queue.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp.c')
+$commonRoot = Join-Path $repoRoot 'firmware/common'
+$sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Core/Src') -Filter '*.c' -File
+$sources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Drivers/STM32F4xx_HAL_Driver/Src') -Filter '*.c' -File
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'can_driver.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'can_health.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'can_rx_queue.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'isotp.c')
 if ($IsotpBenchTx -or $IsotpBenchRx) {
-    $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp_bench.c')
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'isotp_bench.c')
 }
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\watchdog.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\param_store.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\param_log.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_did_db.c')
-$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_ecu.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'watchdog.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'param_store.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'param_log.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_server.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_reference_routines.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_did_db.c')
+$sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_ecu.c')
 $objectFiles = @()
+$repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 
 foreach ($source in $sources | Sort-Object FullName) {
-    $relative = $source.FullName.Substring($projectRoot.Length).TrimStart('\')
-    $object = Join-Path $buildDir ($relative -replace '\.c$', '.o')
+    $relative = $source.FullName.Substring($repoPrefix.Length).Replace('\', '/')
+    $objectRoot = Join-Path $buildDir 'obj'
+    $object = Join-Path $objectRoot ($relative -replace '\.c$', '.o')
     $objectDir = Split-Path -Parent $object
     New-Item -ItemType Directory -Path $objectDir -Force | Out-Null
 
@@ -133,7 +135,7 @@ foreach ($source in $sources | Sort-Object FullName) {
     $objectFiles += $object
 }
 
-$startup = Join-Path $projectRoot 'Core\Startup\startup_stm32f407zgtx.s'
+$startup = Join-Path $projectRoot 'Core/Startup/startup_stm32f407zgtx.s'
 $startupObject = Join-Path $buildDir 'startup_stm32f407zgtx.o'
 Write-Host 'AS  Core\Startup\startup_stm32f407zgtx.s'
 & $gcc '-mcpu=cortex-m4' '-g3' '-DDEBUG' '-DUSE_HAL_DRIVER' '-DSTM32F407xx' '-c' $startup '-o' $startupObject

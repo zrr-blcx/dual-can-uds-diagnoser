@@ -4,23 +4,37 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Install dependencies
-        run: python -m pip install --upgrade pip
-      - name: Install project
-        run: python -m pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Check CLI entry point
+        run: dual-can-uds --help
+      - name: Build wheel
+        run: python -m pip wheel --no-deps . -w dist
       - name: Run tests
         shell: bash
         run: |
@@ -50,3 +64,31 @@ jobs:
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  firmware:
+    name: firmware-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+      - name: Build F407
+        env:
+          ARM_GCC_BIN: /usr/bin
+        run: pwsh -NoProfile -File firmware/ecu-f407/build.ps1
+      - name: Build F103
+        env:
+          ARM_GCC_BIN: /usr/bin
+        run: pwsh -NoProfile -File firmware/ecu-f103/build.ps1
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32-firmware
+          path: |
+            firmware/ecu-f407/Build/ecu-f407.hex
+            firmware/ecu-f407/Build/ecu-f407.bin
+            firmware/ecu-f103/Build/ecu-f103.hex
+            firmware/ecu-f103/Build/ecu-f103.bin

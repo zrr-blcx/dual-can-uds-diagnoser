@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a scoped diagnostic or firmware capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What engineering problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include host and hardware evidence expectations.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CAN / Bus-Off
+        - ISO-TP
+        - UDS
+        - Python diagnostic tool
+        - DBC / scheduler
+        - Documentation / CI

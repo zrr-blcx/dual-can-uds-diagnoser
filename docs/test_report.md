@@ -1,7 +1,7 @@
 # Test Report
 
-> Fill in measured results after hardware testing. Values marked Target are not
-> yet measured.
+> Measured results are recorded by subsystem below. Values marked Target are
+> not yet measured.
 
 ## Environment
 
@@ -10,7 +10,7 @@
 | Date | 2026-10-24 |
 | Tester | Local bench run |
 | Firmware version | Week 3 final formal build, ISO-TP and CAN RX queue |
-| Diagnostic tool version | 1.0.0 |
+| Diagnostic tool version | 0.6.0 Alpha |
 | CAN bitrate | 500 kbps |
 | Transceivers | SN65HVD230 x2 |
 | USB-CAN | CANable slcan |
@@ -101,7 +101,9 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
 | 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
 | 2026-10-25 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
+| 2026-10-25 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `107 passed` |
 | 2026-10-24 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40086628980` |
+| 2026-10-25 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40167418774` |
 
 The 2026-10-24 local regression used the `py -3.14` launcher with the cache
 provider disabled. GitHub Actions independently passed the complete suite on

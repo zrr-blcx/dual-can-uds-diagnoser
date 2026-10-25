@@ -5,4 +5,3 @@ gs_usb>=0.3.1
 libusb>=1.0.26
 udsoncan>=1.20.0
 cantools>=39.4.0
-pytest>=8.0.0

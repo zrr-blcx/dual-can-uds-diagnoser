@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-10-25
+
+- Standardize repository metadata, privacy boundaries, community files, raw
+  firmware build reproducibility, and CI coverage.
 
 - Add Python diagnostic tool V1.0 scaffold.
 - Add ISO-TP multi-frame transport and UDS core services.

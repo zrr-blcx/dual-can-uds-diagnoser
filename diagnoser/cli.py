@@ -1,4 +1,4 @@
-"""Command-line UDS diagnostic tool V1.0."""
+"""Command-line UDS diagnostic tool 0.6.0 Alpha."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "network.json"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="diagnoser",
-        description="Dual-node CAN + UDS diagnostic tool V1.0",
+        description="Dual-node CAN + UDS diagnostic tool 0.6.0 Alpha",
     )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="network JSON config")
     parser.add_argument("--interface", help="python-can interface (memory, slcan, ...)")

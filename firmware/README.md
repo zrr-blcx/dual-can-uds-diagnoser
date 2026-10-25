@@ -69,6 +69,10 @@ powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1
 ```
 
+The scripts resolve `arm-none-eabi-gcc` from `ARM_GCC_BIN`, `PATH`, or common
+STM32CubeIDE installation directories. Set `ARM_GCC_BIN` only when automatic
+discovery cannot find the toolchain.
+
 Build the 100-byte node bench variants with `-IsotpBenchTx` or
 `-IsotpBenchRx`.
 

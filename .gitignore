@@ -5,6 +5,7 @@ __pycache__/
 .pytest_tmp*/
 .pt41/
 .host_test/
+.pip-tmp/
 .venv/
 venv/
 *.egg-info/
@@ -50,10 +51,5 @@ generated_structs/
 .DS_Store
 Thumbs.db
 
-# 本地英语学习计划，不进 GitHub
-/CET4-CET6学习计划.md
 # 本地资料，不进 GitHub
 /本地资料/
-
-# 项目内 Codex 本地规则，不进 GitHub
-/AGENTS.md

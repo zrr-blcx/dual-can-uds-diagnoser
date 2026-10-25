@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/zrr-blcx/dual-can-uds-diagnoser#readme
+    about: Read setup, commands, architecture, and acceptance evidence first.
+  - name: Security report
+    url: https://github.com/zrr-blcx/dual-can-uds-diagnoser/security/advisories/new
+    about: Report vulnerabilities privately.

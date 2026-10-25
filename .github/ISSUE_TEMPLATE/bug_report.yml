@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible software or firmware defect
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove COM-port numbers, probe serial numbers, local paths, secrets,
+        and personal data before submitting.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What failed, and where?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Run ...
+        2. Send ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: 780371e / 0.6.0
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Do not paste raw dumps containing local hardware details.

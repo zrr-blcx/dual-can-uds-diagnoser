@@ -7,30 +7,29 @@
 基于 Python 的双节点 CAN + UDS 诊断工具链，用于 STM32F407/F103 双节点 CAN
 总线环境下的协议验证与故障分析。
 
+项目边界、模块组成与已验证范围见
+[docs/项目说明.md](docs/项目说明.md)。
+
 ## Status
 
-- Python diagnostic tool V1.0 scaffold: ready for development and tests.
-- STM32 firmware: F407/F103 Week 1 CAN 500 kbps baseline and deliverables complete.
-- Week 4 UDS core: `0x10/0x22/0x3E`, DID database, S3 timeout, multi-DID,
-  NRC checks, dual-node routing, and `udsoncan` CANable interoperability pass
-  on F407/F103 hardware. The Week 4 milestone is complete.
-- Week 5 UDS service v1.0: `0x27/0x2E/0x31`, F407/F103 Flash persistence,
-  hardware-backed self-test, parameter clear, pending responses, and the
-  dual-node NRC matrix. The Week 5 milestone is complete.
-- Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` wait, timeout
-  retries, timestamped/JSON output, CANable config, and full dual-node hardware
-  validation. The Week 6 milestone is complete.
+- Project progress: Weeks 1-6 are complete; Weeks 7-10 remain on the roadmap.
+- Week 1: F407/F103 CAN1 at 500 kbps, dual-node frame exchange and hardware
+  baseline complete.
 - Week 2 CAN health and Bus-Off recovery: SCE error handling, IWDG,
-  hardware-synchronized health snapshots, 3/3 automatic recovery events,
-  verified software-reset escalation after three recovery failures, and a
-  register-level WWDG with stop-refresh and early-refresh self-tests.
+  hardware-synchronized health snapshots, physical Bus-Off recovery and WWDG
+  validation complete.
 - Week 3 ISO-TP: portable SF/FF/CF/FC state machines, BS/STmin flow control,
   transmit-completion-aware timeouts, UDS request/response routing, and
-  100-byte bench modes. The software core, host tests, final bidirectional
-  hardware revalidation, negative fault tests and formal UDS regression pass.
-  The Week 3 milestone is complete.
-- CI matrix: Python 3.10, 3.11, and 3.12 pass in Actions run `40086628980`.
-- Acceptance metrics below are targets until measured on real hardware.
+  100-byte bench modes. Host and bidirectional hardware acceptance complete.
+- Week 4: `0x10/0x22/0x3E`, DID database, S3 timeout, multi-DID reads,
+  dual-node routing and `udsoncan` CANable interoperability complete.
+- Week 5: `0x27/0x2E/0x31`, F407/F103 Flash persistence, hardware self-test,
+  parameter clear, pending responses and the dual-node NRC matrix complete.
+- Week 6: diagnostic tool V1.0 Alpha with P2/P2* timing, `0x78` handling,
+  retries, timestamped/JSON output and full F407/F103 CANable validation.
+- CI: Python 3.10-3.14 plus F407/F103 ARM firmware builds.
+- Unfinished Week 7-10 acceptance metrics remain marked `Target` in the
+  roadmap.
 
 ## 核心能力
 
@@ -70,7 +69,7 @@ STM32 ECU (CubeIDE + HAL)
 
 ## 快速开始
 
-Windows 下使用 Python 3.14：
+Windows 下推荐使用 Python 3.14；最低支持 Python 3.10：
 
 ```powershell
 py -3.14 -m pip install -e ".[dev]" -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -110,6 +109,12 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 诊断仪 Alpha 说明、命令列表与输出格式见
 [docs/diagnoser_v1_alpha.md](docs/diagnoser_v1_alpha.md)。
 
+第 5 周安全访问、持久化、自检与参数清除见
+[docs/uds_week5.md](docs/uds_week5.md)。
+
+全量测试结果与实机证据见
+[docs/test_report.md](docs/test_report.md)。
+
 第 3 周 ISO-TP 设计、测试和当前硬件结论见
 [docs/isotp_week3.md](docs/isotp_week3.md)。
 
@@ -131,6 +136,15 @@ pytest
 python -m diagnoser.cli uds-week5 --node ecu1
 ```
 
+固件构建会自动从 `ARM_GCC_BIN`、`PATH` 或常见 STM32CubeIDE 安装目录查找
+`arm-none-eabi-gcc`：
+
+```powershell
+$env:ARM_GCC_BIN = 'C:\path\to\arm-none-eabi\bin' # 仅在自动发现失败时需要
+.\firmware\ecu-f407\build.ps1
+.\firmware\ecu-f103\build.ps1
+```
+
 ## 目录结构
 
 | 路径 | 说明 |
@@ -148,8 +162,13 @@ python -m diagnoser.cli uds-week5 --node ecu1
 
 ## 开发日志
 
-每周日晚自动整理当周开发任务、技术知识点、代码变更和下周计划，生成
+每周整理当周技术进展、代码变更、测试结果和下周计划，生成
 `开发日志/YYYY-Www.md` 并提交到本仓库。
+
+## 贡献与安全
+
+开发流程和提交要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按
+[SECURITY.md](SECURITY.md) 私下报告，不要公开提交设备标识或敏感信息。
 
 ## 许可证
 

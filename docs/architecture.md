@@ -75,11 +75,10 @@ The portable UDS core in `firmware/common/uds_server.c` implements request
 dispatch, `0x10`, `0x22`, `0x27`, `0x2E`, `0x31`, `0x3E`, S3 timeout, DID
 lookup, security state, routine state, and negative responses.
 `firmware/common/uds_did_db.c` provides the F407/F103 DID differences, and
-`firmware/common/uds_ecu.c` wires the DID database and reference routines into
-both applications. The portable ISO-TP core now feeds reassembled requests to
-this layer and transmits its responses. F103 single-frame and 20-byte
-multi-frame UDS paths have passed on hardware; F407/F103 node-to-node ISO-TP
-acceptance remains Target.
+`firmware/common/uds_ecu.c` wires the DID database, persistent storage and
+application routine hooks into both nodes. The portable ISO-TP core feeds
+reassembled requests to this layer and transmits pending and final responses.
+F407/F103 node-to-node ISO-TP, UDS, persistence and NRC acceptance are complete.
 
 ## Scheduling and Fault Injection
 
