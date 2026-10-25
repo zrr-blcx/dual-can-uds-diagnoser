@@ -32,6 +32,8 @@ _Static_assert(WATCHDOG_WWDG_REFRESH_MS > 0U,
                "WWDG refresh interval must be non-zero");
 
 static uint32_t s_wwdg_last_refresh_tick;
+static bool s_iwdg_started;
+static bool s_wwdg_started;
 
 bool Watchdog_Init(uint32_t timeout_ms)
 {
@@ -65,6 +67,7 @@ bool Watchdog_Init(uint32_t timeout_ms)
   }
 
   IWDG->KR = IWDG_KEY_RELOAD;
+  s_iwdg_started = true;
   return true;
 }
 
@@ -87,6 +90,7 @@ bool Watchdog_WwdgInit(uint32_t now)
   WWDG->CR = WATCHDOG_WWDG_COUNTER_INIT;
   s_wwdg_last_refresh_tick = now;
   WWDG->CR = WWDG_CR_WDGA | WATCHDOG_WWDG_COUNTER_INIT;
+  s_wwdg_started = true;
   return true;
 }
 
@@ -102,4 +106,19 @@ void Watchdog_WwdgService(uint32_t now)
 void Watchdog_WwdgKick(void)
 {
   WWDG->CR = WATCHDOG_WWDG_COUNTER_INIT;
+}
+
+uint8_t Watchdog_GetStatus(void)
+{
+  uint8_t status = 0U;
+
+  if (s_iwdg_started)
+  {
+    status |= WATCHDOG_STATUS_IWDG_READY;
+  }
+  if (s_wwdg_started && ((WWDG->CR & WWDG_CR_WDGA) != 0U))
+  {
+    status |= WATCHDOG_STATUS_WWDG_READY;
+  }
+  return status;
 }

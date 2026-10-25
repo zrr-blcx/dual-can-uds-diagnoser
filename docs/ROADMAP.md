@@ -8,8 +8,8 @@
 | 第 2 周：错误处理与 Bus-Off 恢复 | 完成 |
 | 第 3 周：ISO 15765-2 TP 层 | 完成 |
 | 第 4 周：UDS 框架与 0x10/0x22 | 完成 |
-| 第 5 周：0x27 + 0x2E + 0x31 | Target |
-| 第 6 周：Python 诊断仪 V1.0 | Target |
+| 第 5 周：0x27 + 0x2E + 0x31 | 完成 |
+| 第 6 周：Python 诊断仪 V1.0 | 完成 |
 | 第 7 周：DBC + 双节点调度 | Target |
 | 第 8 周：压力测试 + 故障注入 | Target |
 | 第 9 周：Bus-Off 验证 + 稳定性 | Target |

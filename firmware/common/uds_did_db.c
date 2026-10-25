@@ -1,6 +1,7 @@
 #include "uds_did_db.h"
 
 #include <stddef.h>
+#include <string.h>
 
 static const uint8_t g_vin_f407[] = "P2F407TESTVIN0001";
 static const uint8_t g_vin_f103[] = "P2F103TESTVIN0001";
@@ -26,6 +27,7 @@ void UdsDidDb_Init(UdsDidDb_t *database, UdsEcuVariant_t variant)
   {
     return;
   }
+  (void)memset(database, 0, sizeof(*database));
 
   if (variant == UDS_ECU_F103)
   {
@@ -118,4 +120,50 @@ void UdsDidDb_Init(UdsDidDb_t *database, UdsEcuVariant_t variant)
   database->dids[5].write_requires_unlock = false;
 
   database->did_count = 6U;
+}
+
+void UdsDidDb_AttachStorage(UdsDidDb_t *database,
+                            const UdsDidStorage_t *storage)
+{
+  uint16_t index;
+
+  if ((database == NULL) || (storage == NULL))
+  {
+    return;
+  }
+
+  for (index = 0U; index < database->did_count; index++)
+  {
+    UdsDid_t *did = &database->dids[index];
+    uint8_t loaded[UDS_DID_VIN_CAPACITY];
+    uint16_t loaded_length = 0U;
+
+    if ((did->write_sessions_mask == 0U) ||
+        (did->storage == NULL) ||
+        (did->storage_capacity == 0U))
+    {
+      continue;
+    }
+
+    did->storage_load = storage->load;
+    did->storage_save = storage->save;
+    did->storage_context = storage->context;
+
+    if ((storage->load != NULL) &&
+        storage->load(did->did,
+                      loaded,
+                      (uint16_t)sizeof(loaded),
+                      &loaded_length,
+                      storage->context) &&
+        (loaded_length <= did->storage_capacity))
+    {
+      uint16_t data_index;
+      for (data_index = 0U; data_index < loaded_length; data_index++)
+      {
+        did->storage[data_index] = loaded[data_index];
+      }
+      did->data = did->storage;
+      did->length = loaded_length;
+    }
+  }
 }

@@ -25,6 +25,16 @@ typedef struct
   uint8_t vin_storage[UDS_DID_VIN_CAPACITY];
 } UdsDidDb_t;
 
+typedef struct
+{
+  UdsDidLoadHandler_t load;
+  UdsDidSaveHandler_t save;
+  void *context;
+} UdsDidStorage_t;
+
 void UdsDidDb_Init(UdsDidDb_t *database, UdsEcuVariant_t variant);
+
+void UdsDidDb_AttachStorage(UdsDidDb_t *database,
+                            const UdsDidStorage_t *storage);
 
 #endif /* UDS_DID_DB_H */

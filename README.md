@@ -14,10 +14,12 @@
 - Week 4 UDS core: `0x10/0x22/0x3E`, DID database, S3 timeout, multi-DID,
   NRC checks, dual-node routing, and `udsoncan` CANable interoperability pass
   on F407/F103 hardware. The Week 4 milestone is complete.
-- Week 5 UDS service v1.0: `0x27/0x2E/0x31`, security state machine, write
-  rules, routine control, NRC coverage, and dual-node virtual flow.
+- Week 5 UDS service v1.0: `0x27/0x2E/0x31`, F407/F103 Flash persistence,
+  hardware-backed self-test, parameter clear, pending responses, and the
+  dual-node NRC matrix. The Week 5 milestone is complete.
 - Week 6 diagnostic tool V1.0 Alpha: P2/P2* timing, `0x78` wait, timeout
-  retries, timestamped/JSON output, CANable config, and udsoncan interop.
+  retries, timestamped/JSON output, CANable config, and full dual-node hardware
+  validation. The Week 6 milestone is complete.
 - Week 2 CAN health and Bus-Off recovery: SCE error handling, IWDG,
   hardware-synchronized health snapshots, 3/3 automatic recovery events,
   verified software-reset escalation after three recovery failures, and a

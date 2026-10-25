@@ -41,7 +41,8 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Specify the memory areas */
 MEMORY
 {
-FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 64K
+/* Last 1 KB page (0x0800FC00-0x0800FFFF) stores parameter snapshots. */
+FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 63K
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 20K
 }
 

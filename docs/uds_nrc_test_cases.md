@@ -8,24 +8,25 @@
 
 | NRC | 场景 | 请求示例 | 期望响应 | 覆盖位置 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `0x11` | 不支持的 SID | `99` | `7F 99 11` | C `test_negative_responses` / Python `test_week5_nrc_matrix` | Host PASS, HW Target |
-| `0x12` | 不支持的子功能 | `27 05` | `7F 27 12` | C / Python | Host PASS, HW Target |
-| `0x13` | 请求长度错误 | `10`、`27 02` | `7F <SID> 13` | C / Python | Host PASS, HW Target |
-| `0x22` | 条件不满足 | Extended + 已解锁后写 `0xF190` | `7F 2E 22` | C / Python | Host PASS, HW Target |
-| `0x31` | DID 或 Routine 超出范围 | `22 FF FF`、`31 01 12 34` | `7F 22 31`、`7F 31 31` | C / Python | Host PASS, HW Target |
-| `0x33` | 未解锁写受保护 DID | Extended 下 `2E 01 00 ...` | `7F 2E 33` | C / Python / 双节点虚拟流程 | Host PASS, HW Target |
-| `0x78` | 例程仍在运行 | `31 03 02 03`（运行中） | 先 `7F 31 78`，随后 `71 03 ...` | C `RESPONSE_PENDING` / Python pending 测试 / 双节点虚拟流程 | Host PASS, HW Target |
-| `0x7E` | 当前会话不支持该子功能 | Default 下 `2E 01 00 ...` | `7F 2E 7E` | C / Python / 双节点虚拟流程 | Host PASS, HW Target |
+| `0x11` | 不支持的 SID | `99` | `7F 99 11` | C / Python / F407+F103 实机 | HW PASS |
+| `0x12` | 不支持的子功能 | `27 05` | `7F 27 12` | C / Python / F407+F103 实机 | HW PASS |
+| `0x13` | 请求长度错误 | `10`、`27 02` | `7F <SID> 13` | C / Python / F407+F103 实机 | HW PASS |
+| `0x22` | 条件不满足 | Extended + 已解锁后写 `0xF190` | `7F 2E 22` | C / Python / F407+F103 实机 | HW PASS |
+| `0x31` | DID 超出范围 | `22 FF FF` | `7F 22 31` | C / Python / F407+F103 实机 | HW PASS |
+| `0x33` | 未解锁写受保护 DID | Extended 下 `2E 01 00 ...` | `7F 2E 33` | C / Python / F407+F103 实机 | HW PASS |
+| `0x72` | 持久化写入失败 | 强制保存失败镜像执行 `2E 01 00 ...` | 先 `7F 2E 78`，再 `7F 2E 72` | C 存储回调测试 / F407 实机 | HW PASS |
+| `0x78` | 例程或写 DID 挂起 | `31 03 02 03`、`2E 01 00 ...` | 先 `7F <SID> 78`，随后最终响应 | C / Python / F407+F103 实机 | HW PASS |
+| `0x7E` | 当前会话不支持该子功能 | Default 下 `2E 01 00 ...` | `7F 2E 7E` | C / Python / F407+F103 实机 | HW PASS |
 
 ## 安全访问补充 NRC
 
 | NRC | 场景 | 请求示例 | 期望响应 | 覆盖位置 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `0x24` | 未请求 Seed 就发送 Key | `27 02 00 00 00 00` | `7F 27 24` | C / Python | Host PASS, HW Target |
-| `0x24` | Start 前请求例程结果 | `31 03 02 03` | `7F 31 24` | C / Python | Host PASS, HW Target |
-| `0x35` | Key 错误 | `27 02 <错误 Key>` | `7F 27 35` | C / Python | Host PASS, HW Target |
-| `0x36` | 连续 3 次 Key 错误 | 三次 `27 01 + 27 02` | 第三次 `7F 27 36` | C / Python | Host PASS, HW Target |
-| `0x37` | 延时期内再次请求 | `27 01` | `7F 27 37` | C / Python | Host PASS, HW Target |
+| `0x24` | 未请求 Seed 就发送 Key | `27 02 00 00 00 00` | `7F 27 24` | C / Python / F407+F103 实机 | HW PASS |
+| `0x24` | Start 前请求例程结果 | `31 03 02 03` | `7F 31 24` | C / Python | Host PASS |
+| `0x35` | Key 错误 | `27 02 <错误 Key>` | `7F 27 35` | C / Python / F407+F103 实机 | HW PASS |
+| `0x36` | 连续 3 次 Key 错误 | 三次 `27 01 + 27 02` | 第三次 `7F 27 36` | C / Python / F407+F103 实机 | HW PASS |
+| `0x37` | 延时期内再次请求 | `27 01` | `7F 27 37` | C / Python / F407+F103 实机 | HW PASS |
 | `0x22` | Running 例程重复 Start | 连续两次 `31 01 02 03` | 第二次 `7F 31 22` | C / Python | Host PASS, HW Target |
 
 ## 执行方式

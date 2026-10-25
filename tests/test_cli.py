@@ -83,7 +83,7 @@ def test_cli_reports_unavailable_can_adapter(capsys) -> None:
             "--interface",
             "slcan",
             "--channel",
-            "COM99",
+            "COM_TEST",
             "trace",
             "--seconds",
             "0.1",

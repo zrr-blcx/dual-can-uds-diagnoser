@@ -33,8 +33,8 @@ ISO-TP transmit
 | `0x10` | Diagnostic Session Control | Default、Extended、Programming；支持抑制正响应位 |
 | `0x22` | Read Data By Identifier | 支持单个或多个 DID，响应超出缓冲区时拒绝 |
 | `0x27` | Security Access | Seed/Key、解锁状态、错误次数、10 s 延时、会话/超时自动锁定 |
-| `0x2E` | Write Data By Identifier | 会话/解锁/DID 容量检查，支持 RAM 写入回读 |
-| `0x31` | Routine Control | Start/Stop/RequestResults，支持 `0x78` 响应挂起 |
+| `0x2E` | Write Data By Identifier | 会话/解锁/DID 容量检查；先回 `0x78`，持久化成功后再更新 RAM |
+| `0x31` | Routine Control | `0203` 自检、`FF00` 参数清除，均支持 `0x78` 响应挂起 |
 | `0x3E` | Tester Present | 支持 `0x00/0x80` 子功能并刷新 S3 计时 |
 
 UDS 核心通过 `UdsServerConfig_t` 接收 DID 表、例程表、P2、P2*、S3 和允许
@@ -81,6 +81,7 @@ Python DID 常量集中在 `diagnoser/uds/dids.py`，避免客户端、虚拟 EC
 | `0x35` | Key 错误 |
 | `0x36` | 连续 Key 错误超过次数 |
 | `0x37` | 安全延时未结束 |
+| `0x72` | 持久化写入或回读校验失败 |
 | `0x78` | 例程执行中，响应挂起 |
 | `0x7E` | 当前会话不支持该子功能 |
 

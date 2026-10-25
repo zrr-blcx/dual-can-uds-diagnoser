@@ -15,9 +15,9 @@ def test_gs_usb_device_name_is_preserved() -> None:
 
 
 def test_slcan_serial_port_stays_a_string() -> None:
-    config = NetworkConfig(interface="slcan", channel="COM7")
+    config = NetworkConfig(interface="slcan", channel="COM_TEST")
 
-    assert resolve_channel(config) == "COM7"
+    assert resolve_channel(config) == "COM_TEST"
 
 
 def test_prepare_usb_backend_is_idempotent() -> None:

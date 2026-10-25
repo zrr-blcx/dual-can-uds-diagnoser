@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "app_param_storage.h"
 #include "can_driver.h"
 #include "can_health.h"
 #include "isotp.h"
@@ -131,6 +132,16 @@ volatile uint32_t g_can_rx_count = 0U;
 /* USER CODE BEGIN PV */
 static UdsEcu_t g_uds;
 static CanHealth_t g_can_health;
+static AppParamStorage_t g_param_storage;
+
+typedef struct
+{
+  AppParamStorage_t *params;
+  CanHealth_t *health;
+} AppUdsHooksContext_t;
+
+static AppUdsHooksContext_t g_uds_hooks_context;
+static UdsEcuHooks_t g_uds_hooks;
 
 /* ISO-TP transport endpoints. The node is a UDS server: it receives a request
    on APP_ISOTP_RX_ID, feeds it to the UDS server, and sends the response out
@@ -213,6 +224,8 @@ static void APP_ServiceIsotpBench(uint32_t now);
 static void APP_ServiceCanHealth(uint32_t now);
 static void APP_UpdateHealthSummary(void);
 static void APP_HealthLog(uint8_t kind, uint8_t arg);
+static uint8_t APP_UdsSelfTest(void *context);
+static bool APP_UdsEraseParams(void *context);
 
 /* USER CODE END PFP */
 
@@ -252,6 +265,10 @@ int main(void)
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
 
+  /* Startup-only parameter compaction may erase the reserved last sector.
+     This must stay before both watchdogs are enabled. */
+  AppParamStorage_Init(&g_param_storage);
+
   hcan1.Instance = CAN1;
   if (CanDriver_Init(&g_can, &hcan1, 6U, CAN_BS1_11TQ, CAN_BS2_2TQ, 0U, APP_OnCanRx) != HAL_OK)
   {
@@ -266,7 +283,15 @@ int main(void)
     Error_Handler();
   }
 
-  UdsEcu_Init(&g_uds, UDS_ECU_F407);
+  g_uds_hooks_context.params = &g_param_storage;
+  g_uds_hooks_context.health = &g_can_health;
+  g_uds_hooks.self_test = APP_UdsSelfTest;
+  g_uds_hooks.erase_params = APP_UdsEraseParams;
+  g_uds_hooks.context = &g_uds_hooks_context;
+  UdsEcu_InitWithHooks(&g_uds,
+                       UDS_ECU_F407,
+                       AppParamStorage_GetUdsStorage(&g_param_storage),
+                       &g_uds_hooks);
 
   /* ISO-TP transport endpoints bound to the CAN driver. */
   {
@@ -557,12 +582,33 @@ static void APP_ServiceIsotp(uint32_t now)
       result = UdsEcu_Process(&g_uds, now, request, request_length,
                               g_isotp_tx_buffer, sizeof(g_isotp_tx_buffer),
                               &response_length);
-      if (result == UDS_PROCESS_RESPONSE && response_length > 0U)
+      if (((result == UDS_PROCESS_RESPONSE) ||
+           (result == UDS_PROCESS_RESPONSE_PENDING)) &&
+          (response_length > 0U))
       {
         if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer, response_length) == ISOTP_OK)
         {
           g_isotp_serving = true;
         }
+      }
+    }
+  }
+
+  if (!g_isotp_serving)
+  {
+    UdsProcessResult_t pending_result;
+
+    response_length = 0U;
+    pending_result = UdsEcu_PollPending(&g_uds,
+                                        now,
+                                        g_isotp_tx_buffer,
+                                        sizeof(g_isotp_tx_buffer),
+                                        &response_length);
+    if ((pending_result == UDS_PROCESS_RESPONSE) && (response_length > 0U))
+    {
+      if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer, response_length) == ISOTP_OK)
+      {
+        g_isotp_serving = true;
       }
     }
   }
@@ -752,6 +798,36 @@ static void APP_HealthLog(uint8_t kind, uint8_t arg)
   g_app_health_log.entries[index].reserved = 0U;
   g_app_health_log.next_index = (index + 1U) % APP_HEALTH_LOG_SIZE;
   g_app_health_log.recorded++;
+}
+
+static uint8_t APP_UdsSelfTest(void *context)
+{
+  const AppUdsHooksContext_t *hooks = (const AppUdsHooksContext_t *)context;
+  uint8_t result = 0U;
+  uint8_t watchdog_status;
+
+  if (!AppParamStorage_IsValid(hooks->params))
+  {
+    result |= UDS_ECU_SELFTEST_PARAM_FAILURE;
+  }
+  if (CanHealth_GetState(hooks->health) != CAN_HEALTH_STATE_ERROR_ACTIVE)
+  {
+    result |= UDS_ECU_SELFTEST_CAN_FAILURE;
+  }
+  watchdog_status = Watchdog_GetStatus();
+  if ((watchdog_status &
+       (WATCHDOG_STATUS_IWDG_READY | WATCHDOG_STATUS_WWDG_READY)) !=
+      (WATCHDOG_STATUS_IWDG_READY | WATCHDOG_STATUS_WWDG_READY))
+  {
+    result |= UDS_ECU_SELFTEST_WATCHDOG_FAILURE;
+  }
+  return result;
+}
+
+static bool APP_UdsEraseParams(void *context)
+{
+  const AppUdsHooksContext_t *hooks = (const AppUdsHooksContext_t *)context;
+  return AppParamStorage_Clear(hooks->params);
 }
 
 static void APP_UpdateHealthSummary(void)

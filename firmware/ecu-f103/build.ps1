@@ -3,6 +3,7 @@
     [switch]$IsotpBenchRx,
     [ValidateRange(1, 300)][int]$IsotpBenchLength = 100,
     [switch]$IsotpForceTxBusy,
+    [switch]$ParamSaveFailureTest,
     [switch]$WwdgSelfTest,
     [switch]$WwdgEarlyFeedTest
 )
@@ -78,6 +79,10 @@ if ($IsotpForceTxBusy) {
     $commonFlags += '-DAPP_ISOTP_FORCE_TX_BUSY=1U'
     Write-Host 'ISO-TP FAULT: force transmit-busy path'
 }
+if ($ParamSaveFailureTest) {
+    $commonFlags += '-DAPP_PARAM_FORCE_SAVE_FAILURE=1U'
+    Write-Host 'PARAM TEST: force persistence failure'
+}
 if ($WwdgSelfTest) {
     $commonFlags += '-DAPP_WWDG_SELFTEST=1U'
     Write-Host 'WWDG SELF TEST: stop refreshing WWDG'
@@ -97,6 +102,8 @@ if ($IsotpBenchTx -or $IsotpBenchRx) {
     $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\isotp_bench.c')
 }
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\watchdog.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\param_store.c')
+$sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\param_log.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_server.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_reference_routines.c')
 $sources += Get-Item -LiteralPath (Join-Path $projectRoot '..\common\uds_did_db.c')

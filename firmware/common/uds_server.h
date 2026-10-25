@@ -40,6 +40,7 @@
 #define UDS_NRC_INVALID_KEY 0x35U
 #define UDS_NRC_EXCEED_NUMBER_OF_ATTEMPTS 0x36U
 #define UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED 0x37U
+#define UDS_NRC_GENERAL_PROGRAMMING_FAILURE 0x72U
 #define UDS_NRC_RESPONSE_PENDING 0x78U
 #define UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7EU
 
@@ -49,6 +50,8 @@
 #define UDS_MAX_DIDS 16U
 #define UDS_MAX_ROUTINES 8U
 #define UDS_ROUTINE_RESULT_MAX 16U
+#define UDS_PENDING_ROUTINE_DATA_MAX 16U
+#define UDS_PENDING_DID_DATA_MAX 64U
 
 /* Security limits and the Week 5 demo transform input */
 #define UDS_SECURITY_SEED_SIZE 4U
@@ -80,6 +83,17 @@ typedef enum
   UDS_PROCESS_RESPONSE_PENDING = 4
 } UdsProcessResult_t;
 
+typedef bool (*UdsDidLoadHandler_t)(uint16_t did,
+                                    uint8_t *data,
+                                    uint16_t capacity,
+                                    uint16_t *length,
+                                    void *context);
+
+typedef bool (*UdsDidSaveHandler_t)(uint16_t did,
+                                    const uint8_t *data,
+                                    uint16_t length,
+                                    void *context);
+
 typedef struct
 {
   uint16_t did;
@@ -91,6 +105,9 @@ typedef struct
   uint8_t write_sessions_mask; /* 0 = read-only DID */
   uint8_t write_required_session; /* 0 = no extra condition */
   bool write_requires_unlock;
+  UdsDidLoadHandler_t storage_load;
+  UdsDidSaveHandler_t storage_save;
+  void *storage_context;
 } UdsDid_t;
 
 typedef enum
@@ -155,6 +172,16 @@ typedef struct
   uint8_t routine_state[UDS_MAX_ROUTINES];
   uint8_t routine_result[UDS_MAX_ROUTINES][UDS_ROUTINE_RESULT_MAX];
   uint16_t routine_result_length[UDS_MAX_ROUTINES];
+  bool pending_routine_response;
+  uint8_t pending_routine_index;
+  uint8_t pending_routine_subfunction;
+  bool pending_routine_suppress_positive;
+  uint8_t pending_routine_data[UDS_PENDING_ROUTINE_DATA_MAX];
+  uint16_t pending_routine_data_length;
+  bool pending_did_write;
+  uint8_t pending_did_index;
+  uint8_t pending_did_data[UDS_PENDING_DID_DATA_MAX];
+  uint16_t pending_did_length;
 } UdsServer_t;
 
 bool UdsServer_Init(UdsServer_t *server, const UdsServerConfig_t *config);
@@ -168,6 +195,12 @@ UdsProcessResult_t UdsServer_Process(UdsServer_t *server,
                                      uint8_t *response,
                                      uint16_t response_capacity,
                                      uint16_t *response_length);
+
+UdsProcessResult_t UdsServer_PollPending(UdsServer_t *server,
+                                         uint32_t now_ms,
+                                         uint8_t *response,
+                                         uint16_t response_capacity,
+                                         uint16_t *response_length);
 
 uint8_t UdsServer_GetSession(const UdsServer_t *server);
 

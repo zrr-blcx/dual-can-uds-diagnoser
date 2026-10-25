@@ -29,6 +29,19 @@
   per-ECU F407/F103 DID defaults.
 - Add `0x31` Start/Stop/RequestResults with `0x78` response-pending support
   and reference self-test/erase routines.
+- Transmit firmware `0x78` responses through ISO-TP and poll running routines
+  until the automatic final response is ready, with host-test coverage.
+- Defer `0x2E` persistence until after `7F 2E 78`, add NRC `0x72`, and update
+  RAM only after the storage callback and read-back verify successfully.
+- Reserve F407 Flash Sector 11 for CRC-protected append-only DID snapshots,
+  with startup-only compaction before the watchdogs are enabled.
+- Validate F407 pending writes and parameter persistence on hardware, including
+  a full power-cycle read-back and a complete `uds-week5` flow.
+- Reflash F103 with the pending-response fix and validate the complete Week 5
+  flow plus the shared NRC matrix on both nodes.
+- Add F103 persistence using its last 1 KB Flash page.
+- Implement hardware-backed `0203` self-test, append-only `FF00` parameter
+  clear, and forced-save NRC `0x72` validation on F407.
 - Add the Week 5 NRC test-case table and a dual-node virtual
   `10 03 -> 27 01 -> 27 02 -> 2E -> 31` workflow.
 - Add the `uds-week5` and `security` CLI commands and secure-write/routine

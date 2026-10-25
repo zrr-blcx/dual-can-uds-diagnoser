@@ -47,18 +47,19 @@
 
 | NRC | Scenario | Expected | Result |
 | --- | --- | --- | --- |
-| 0x11 | Unsupported service | PASS | Host PASS, HW Target |
-| 0x12 | Unsupported subfunction | PASS | Host PASS, HW Target |
+| 0x11 | Unsupported service | PASS | F407 + F103 hardware PASS |
+| 0x12 | Unsupported subfunction | PASS | F407 + F103 hardware PASS |
 | 0x13 | Wrong message length | PASS | Host + F407/F103 hardware PASS |
-| 0x22 | Conditions not correct | PASS | Host PASS, HW Target |
-| 0x24 | Request sequence error | PASS | Host PASS, HW Target |
+| 0x22 | Conditions not correct | PASS | F407 + F103 hardware PASS |
+| 0x24 | Request sequence error | PASS | F407 + F103 hardware PASS |
 | 0x31 | Request out of range | PASS | Host + F407/F103 hardware PASS |
-| 0x33 | Security access denied | PASS | Host PASS, HW Target |
-| 0x35 | Invalid key | PASS | Host PASS, HW Target |
-| 0x36 | Exceeded number of attempts | PASS | Host PASS, HW Target |
-| 0x37 | Required time delay not expired | PASS | Host PASS, HW Target |
-| 0x78 | Response pending | PASS | Host PASS, HW Target |
-| 0x7E | Subfunction not supported in active session | PASS | Host PASS, HW Target |
+| 0x33 | Security access denied | PASS | F407 + F103 hardware PASS |
+| 0x35 | Invalid key | PASS | F407 + F103 hardware PASS |
+| 0x36 | Exceeded number of attempts | PASS | F407 + F103 hardware PASS |
+| 0x37 | Required time delay not expired | PASS | F407 + F103 hardware PASS |
+| 0x72 | General programming failure | PASS | F407 hardware PASS |
+| 0x78 | Response pending | PASS | F407 + F103 hardware PASS |
+| 0x7E | Subfunction not supported in active session | PASS | F407 + F103 hardware PASS |
 
 ## Bus-Off Recovery
 
@@ -98,7 +99,8 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-04 | 3.12.13 (`.venv`) | `python -m pytest` | `48 passed`, 1 cache-permission warning |
 | 2026-10-11 | 3.12.13 (`.venv`) | `python -m pytest` | `66 passed` |
 | 2026-10-22 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `78 passed` |
-| 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `100 passed` |
+| 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
+| 2026-10-25 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
 | 2026-10-24 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40086628980` |
 
 The 2026-10-24 local regression used the `py -3.14` launcher with the cache
@@ -196,8 +198,10 @@ dual-node MemoryBus configuration:
 | 0x2E before session change | `7F 2E 7E` | PASS |
 | 0x2E in Extended without unlock | `7F 2E 33` | PASS |
 | 0x2E custom DID after unlock | Write and read-back `DE AD BE EF` | PASS |
+| 0x2E persistent write | First request returns `7F 2E 78`, then `6E 01 00` | F407 + F103 hardware PASS |
 | 0x2E VIN outside Programming | `7F 2E 22` | PASS |
 | First RequestResults while routine runs | `7F 31 78` | PASS |
+| Final response after pending | Automatic `71 03 ...` without a repeated RequestResults | F407 + F103 hardware PASS |
 | Self-test completion | `71 03 02 03 00` | PASS |
 | Erase routine without unlock | `7F 31 33` | PASS |
 | Erase routine after unlock | `71 03 FF 00 00` | PASS |
@@ -214,6 +218,65 @@ The C host test also confirms that the full service layer compiles into both
 STM32 targets. At the time of Week 5 testing, real CANable capture and hardware
 acceptance were Target because ISO-TP was pending. The Week 3 hardware section
 below records the later closure.
+
+On 2026-10-24 the firmware application path was corrected to transmit
+`UDS_PROCESS_RESPONSE_PENDING` through ISO-TP and to poll
+`UdsEcu_PollPending()` until the routine produces its final response. The C
+host test now verifies that the final response is generated without repeating
+the RequestResults request. Both firmware targets build successfully:
+F407 `text=34124, bss=9164`; F103 `text=32036, bss=9200`.
+
+F407 parameter storage uses the reserved last Flash sector. Runtime writes append
+an 80-byte CRC-protected snapshot without erasing; startup compacts the log
+before either watchdog is enabled. Host tests cover append, reload, CRC
+corruption, partial records, write failure, and delayed `0x2E` completion.
+
+### F407 Hardware Persistence and Pending Validation
+
+Measured on 2026-10-24 through the real CANable at 500 kbps. The F407 application
+was flashed with sectors 0-10 erased explicitly; Sector 11 was excluded.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Preserve Sector 11 while flashing | Hash unchanged | PASS |
+| `22 F190` after flash | Valid VIN | PASS, 44.0 ms |
+| `2E 0100 DE AD BE EF` | `7F 2E 78`, then `6E 01 00` | PASS, 44.2 ms, one pending |
+| Immediate read-back | `DE AD BE EF` | PASS, 7.4 ms |
+| Power-cycle read-back | `DE AD BE EF` remains | PASS, 6.9 ms |
+| Parameter record placement | 80 non-FF bytes in Sector 11 | PASS |
+| Full F407 `uds-week5` | All steps pass | PASS |
+| `31 03 0203` pending | Final `71 03 02 03 00` | PASS, 43.8 ms, one pending |
+
+The F407 ST-Link probe was disconnected after the power-cycle test, so the
+post-power-cycle raw Sector 11 hash remains unverified. The DID read-back proves
+the persisted application value survived power loss.
+
+The original F103 image did not contain the pending-response fix;
+`uds-week5 --node ecu2` stopped at `routine-self-test-results` with an ISO-TP
+timeout. After backing up the 64 KB image, F103 was erased and reflashed under
+reset. The repeated full flow passed all 13 steps. A single CANable process then
+validated the required NRC matrix on both nodes.
+
+### Week 5 Maintenance Routines and F103 Persistence
+
+Measured on 2026-10-25 after flashing the formal images.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| F407 `0203` self-test | Bitmask `00` | PASS, 43.8 ms, one pending |
+| F103 `0203` self-test | Bitmask `00` | PASS, 43.9 ms, one pending |
+| F407 `FF00` clear | Result `00`, DID resets to `00 01` | PASS |
+| F103 `FF00` clear | Result `00`, DID resets to `00 01` | PASS |
+| F103 write and immediate read-back | `11 22 33 44` | PASS |
+| F103 write record | One 80-byte record in the last 1 KB page | PASS |
+| F103 power-cycle read-back | `11 22 33 44` survives | PASS, 11.1 ms |
+| Forced F407 save failure | `7F 2E 78` then `7F 2E 72` | PASS, one pending |
+| Failed write read-back | Value remains unchanged | PASS |
+| Formal F407 restore | Self-test returns `00` | PASS |
+
+`0xFF00` uses an append-only empty snapshot at runtime. It logically removes
+persisted values and restores DID defaults without risking the running WWDG;
+physical sector/page erasure remains confined to startup compaction.
 
 ## Week 6 Diagnostic Tool V1.0 Alpha Validation
 
@@ -425,5 +488,10 @@ multi-frame `22 F190`.
 - Week 3 ISO-TP bidirectional 100-byte transfer: PASS.
 - Week 4 UDS sessions, DID reads, S3 timeout, NRC, dual-node routing and
   udsoncan CANable interoperability: PASS.
+- Week 5 F407 persistent DID write/read-back and dual-node pending/NRC flow:
+  PASS. Dual-node real self-test, parameter clear, F103 persistence and NRC
+  `0x72` injection also PASS.
+- Week 6 diagnostic CLI against both real ECUs: session, read, write, routine,
+  raw, pending wait and the complete `uds-week5` flow PASS.
 - Bus-Off physical detection, automatic recovery, and sustained-fault software
   reset escalation: PASS.

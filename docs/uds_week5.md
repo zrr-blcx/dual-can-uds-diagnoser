@@ -15,8 +15,17 @@ F407/F103 两套工程中启用同一服务层与差异化 DID 数据库。Pytho
   `10 03 -> 27 01 -> 27 02 -> 2E -> 31` 全流程。
 - ISO-TP 路径已完成双向 100 字节验收；F407/F103 的 `10 03` 和
   `22 F190` 已通过实机回归。
-- 未完成：完整 `27/2E/31` 链路、真实 Flash 擦除和实机 NRC 时序记录。
-  因此 `docs/ROADMAP.md` 第 5 周状态保持 Target。
+- F407 已完成 `27 -> 2E -> 31`、`0x2E/0x31` pending、写入后立即回读和
+  断电重启回读；参数记录落在保留的 Sector 11。
+- F103 已使用最后一个 1 KB Flash 页保存参数，完成写入、断电重启回读和
+  完整 `27 -> 2E -> 31`。
+- 两节点实机 NRC 矩阵已覆盖 `0x11/12/13/22/24/31/33/35/36/37/78/7E`。
+- `0x0203` 检查参数区、CAN 错误状态和 IWDG/WWDG；两节点实机结果均为
+  `00`。
+- `0xFF00` 仅逻辑清除参数快照并恢复 DID 默认值；物理扇区擦除延后到启动
+  压缩。两节点实机均为 `pending=1`、最终结果 `00`。
+- F407 强制保存失败镜像返回 `7F 2E 72`，恢复正式镜像后自检和读写正常。
+- 第 5 周里程碑完成。
 
 ## 0x27 安全访问
 
@@ -73,8 +82,27 @@ key  = 0xE174F5DA
 | `0xF19A` | ECU 名称 | `ecu1` | `ecu2` | - | 只读 |
 | `0xF19B` | 软件版本 | `V1.0` | `V1.0` | - | 只读 |
 
-写操作先写入 RAM 缓冲区，再由 `UdsServer_Process` 更新读取长度。实机接入
-Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调。
+`0x2E` 首次请求只把写入内容挂起并返回 `7F 2E 78`，下一轮主循环执行存储
+回调，成功返回 `6E <DID>`，失败返回标准 NRC `0x72`。RAM 缓冲区只在持久化
+成功后更新，避免写失败时读到未落盘的数据。
+
+F407 使用保留的 Flash Sector 11 保存 `0xF190/0xF191/0x0100`：
+
+| 项 | 配置 |
+| --- | --- |
+| 参数区 | `0x080E0000–0x080FFFFF`，128 KB |
+| 应用区 | `0x08000000–0x080DFFFF`，896 KB |
+| 运行时写入 | 80 字节快照追加到空白槽，不擦除 |
+| 容量 | 最多 1638 个快照 |
+| 压缩时机 | 下次启动、IWDG/WWDG 启动前 |
+| 完整性 | Magic、版本、记录数、CRC32、写后回读 |
+
+F103 使用最后一个 1 KB 页 `0x0800FC00–0x0800FFFF`，应用区限制为
+63 KB。它复用相同的追加日志：最多 12 条 80 字节快照，运行时返回
+`0x72` 而不擦除，下次启动自动压缩。
+
+`0xFF00` 不执行运行中物理扇区擦除，而是追加一条空快照作为逻辑清除，
+立即把 DID 恢复默认值。物理擦除仍只在启动压缩、看门狗启动前发生。
 
 ## 0x31 例行控制
 
@@ -89,7 +117,7 @@ Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调�
 | Routine ID | 名称 | 会话 | 解锁要求 | 行为 |
 | --- | --- | --- | --- | --- |
 | `0x0203` | 自检 | Extended/Programming | 否 | Start 后进入 Running；RequestResults 时先回 NRC `0x78`，随后 ECU 主动发送最终正响应 |
-| `0xFF00` | 擦除 | Extended/Programming | 是 | 当前为可移植模拟实现；与自检相同的 `0x78` + 最终响应时序 |
+| `0xFF00` | 参数清除 | Extended/Programming | 是 | 追加空快照恢复 DID 默认值；使用 `0x78` + 最终响应时序 |
 
 处理规则：
 
@@ -97,16 +125,21 @@ Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调�
 - 非 Running 状态下 Stop：NRC `0x24`。
 - Start 之前 RequestResults：NRC `0x24`。
 - RequestResults 期间 ECU 先回 `7F 31 78`，再按 P2* 发送最终正响应；
-  Python 诊断仪自动等待，固件 C 核心通过 `UDS_PROCESS_RESPONSE_PENDING`
-  由应用层安排后续响应。
+  Python 诊断仪自动等待。两个固件主循环会把
+  `UDS_PROCESS_RESPONSE_PENDING` 交给 ISO-TP 发回，并通过
+  `UdsEcu_PollPending()` 继续推进例程；例程完成后自动发送最终正响应，
+  不要求诊断仪重复请求。
 - 未定义的 Routine ID：NRC `0x31`。
 - 未支持子功能：NRC `0x12`。
 - 会话不允许：NRC `0x7E`。
 - 未解锁且例程要求安全访问：NRC `0x33`。
+- `0x0203` 返回 1 字节故障位掩码：bit0 参数区、bit1 CAN 状态、
+  bit2 看门狗；`00` 表示全部通过。
+- `0xFF00` 成功时返回 `00`，逻辑清除失败时返回 `01`。
 
-例程通过 `UdsRoutineHandler_t` 回调实现。当前参考实现位于
-`firmware/common/uds_reference_routines.c`，只维护 Running/Complete 状态，
-不对 Flash 做真实擦写；真实擦除逻辑应在应用层替换该回调。
+例程通过 `UdsRoutineHandler_t` 回调实现。`UdsEcu_InitWithHooks()` 接收
+应用自检与参数清除回调；`uds_reference_routines.c` 仅保留为无硬件参考
+实现。真实节点使用 `0x0203` 状态检查和 `0xFF00` 空快照清除。
 
 ## 主机验证
 
@@ -125,3 +158,8 @@ Flash/EEPROM 时，只需把 `UdsDid_t.storage` 替换为持久化读写回调�
 
 未完成项保留在第五周目标中：完整 `27/2E/31` 双节点实测、真实 Flash
 擦除和实机 NRC 时序记录。
+
+2026-10-24 修正了固件挂起响应路径：F407/F103 原先只发送
+`UDS_PROCESS_RESPONSE`，会丢弃首次 `7F 31 78`。现在 C 主机测试覆盖
+“pending -> 自动最终响应 -> 不重复发送”，完整回归 `102 passed`。
+F407/F103 的真实 CANable pending 时序均已通过。

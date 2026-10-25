@@ -401,8 +401,10 @@ static void test_security_write_and_routine_flow(void)
     CHECK(response[0] == 0x7FU);
     CHECK(response[1] == 0x31U);
     CHECK(response[2] == 0x78U);
-    CHECK(run(&ecu.server, 0U, results_self_test, (uint16_t)sizeof(results_self_test), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+    CHECK(UdsEcu_PollPending(&ecu, 10U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
     expect_bytes(response, response_length, expected_results, (uint16_t)sizeof(expected_results));
+    CHECK(UdsEcu_PollPending(&ecu, 20U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_NO_RESPONSE);
+    CHECK(response_length == 0U);
   }
 
   CHECK(run(&ecu.server, 0U, session_default, (uint16_t)sizeof(session_default), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
@@ -498,6 +500,262 @@ static void test_sequence_error_for_key_without_seed(void)
   expect_negative(&ecu.server, 0U, send_key, (uint16_t)sizeof(send_key), 0x27U, UDS_NRC_REQUEST_SEQUENCE_ERROR);
 }
 
+typedef struct
+{
+  uint8_t vin[17];
+  uint16_t vin_length;
+  uint8_t custom[16];
+  uint16_t custom_length;
+  uint32_t load_count;
+  uint32_t save_count;
+  bool fail_save;
+} StoredDidState_t;
+
+static bool stored_did_load(uint16_t did,
+                            uint8_t *data,
+                            uint16_t capacity,
+                            uint16_t *length,
+                            void *context)
+{
+  StoredDidState_t *state = (StoredDidState_t *)context;
+  const uint8_t *source = NULL;
+  uint16_t source_length = 0U;
+
+  state->load_count++;
+  if (did == 0xF190U)
+  {
+    source = state->vin;
+    source_length = state->vin_length;
+  }
+  else if (did == 0xF191U)
+  {
+    static const uint8_t dtc[] = {0x11U, 0x22U, 0x33U, 0x44U};
+    source = dtc;
+    source_length = (uint16_t)sizeof(dtc);
+  }
+  else if (did == 0x0100U)
+  {
+    source = state->custom;
+    source_length = state->custom_length;
+  }
+  else
+  {
+    return false;
+  }
+
+  if ((source == NULL) || (source_length > capacity))
+  {
+    return false;
+  }
+  {
+    uint16_t index;
+    for (index = 0U; index < source_length; index++)
+    {
+      data[index] = source[index];
+    }
+  }
+  *length = source_length;
+  return true;
+}
+
+static bool stored_did_save(uint16_t did,
+                            const uint8_t *data,
+                            uint16_t length,
+                            void *context)
+{
+  StoredDidState_t *state = (StoredDidState_t *)context;
+
+  state->save_count++;
+  if (state->fail_save)
+  {
+    return false;
+  }
+  if ((did == 0x0100U) && (length <= sizeof(state->custom)))
+  {
+    uint16_t index;
+    for (index = 0U; index < length; index++)
+    {
+      state->custom[index] = data[index];
+    }
+    state->custom_length = length;
+    return true;
+  }
+  return false;
+}
+
+static void test_ecu_storage_callbacks(void)
+{
+  UdsEcu_t ecu;
+  StoredDidState_t state = {0};
+  UdsDidStorage_t storage;
+  const uint8_t loaded_vin[] = "PERSISTEDVIN00001";
+  const uint8_t initial_custom[] = {0x10U, 0x20U};
+  const uint8_t replacement[] = {0xCAU, 0xFEU};
+  const uint8_t read_custom[] = {0x22U, 0x01U, 0x00U};
+  const uint8_t write_custom[] = {0x2EU, 0x01U, 0x00U, 0xCAU, 0xFEU};
+  const uint8_t session_extended[] = {0x10U, 0x03U};
+  const uint8_t request_seed[] = {0x27U, 0x01U};
+  uint8_t response[64] = {0};
+  uint16_t response_length = 0U;
+  uint8_t send_key[6] = {0x27U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U};
+  uint32_t seed;
+  uint32_t key;
+
+  for (uint16_t index = 0U; index < (uint16_t)(sizeof(loaded_vin) - 1U); index++)
+  {
+    state.vin[index] = loaded_vin[index];
+  }
+  state.vin_length = (uint16_t)(sizeof(loaded_vin) - 1U);
+  for (uint16_t index = 0U; index < (uint16_t)sizeof(initial_custom); index++)
+  {
+    state.custom[index] = initial_custom[index];
+  }
+  state.custom_length = (uint16_t)sizeof(initial_custom);
+  storage.load = stored_did_load;
+  storage.save = stored_did_save;
+  storage.context = &state;
+
+  UdsEcu_InitWithStorage(&ecu, UDS_ECU_F407, &storage);
+  CHECK(state.load_count == 3U);
+
+  CHECK(run(&ecu.server, 0U, read_custom, (uint16_t)sizeof(read_custom), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 5U);
+  CHECK(response[3] == initial_custom[0]);
+  CHECK(response[4] == initial_custom[1]);
+
+  CHECK(run(&ecu.server, 0U, session_extended, (uint16_t)sizeof(session_extended), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, request_seed, (uint16_t)sizeof(request_seed), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  seed = ((uint32_t)response[2] << 24U) | ((uint32_t)response[3] << 16U) |
+         ((uint32_t)response[4] << 8U) | (uint32_t)response[5];
+  key = UdsSecurity_ComputeKey(seed, UDS_DEFAULT_SECURITY_SALT);
+  send_key[2] = (uint8_t)(key >> 24U);
+  send_key[3] = (uint8_t)(key >> 16U);
+  send_key[4] = (uint8_t)(key >> 8U);
+  send_key[5] = (uint8_t)key;
+  CHECK(run(&ecu.server, 0U, send_key, (uint16_t)sizeof(send_key), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+
+  CHECK(run(&ecu.server, 0U, write_custom, (uint16_t)sizeof(write_custom), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE_PENDING);
+  CHECK(response_length == 3U);
+  CHECK(response[0] == UDS_SID_NEGATIVE_RESPONSE);
+  CHECK(response[1] == UDS_SID_WRITE_DATA_BY_IDENTIFIER);
+  CHECK(response[2] == UDS_NRC_RESPONSE_PENDING);
+  CHECK(state.save_count == 0U);
+  CHECK(UdsEcu_PollPending(&ecu, 10U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 3U);
+  CHECK(response[0] == UDS_SID_WRITE_DATA_BY_IDENTIFIER + 0x40U);
+  CHECK(response[1] == 0x01U);
+  CHECK(response[2] == 0x00U);
+  CHECK(state.save_count == 1U);
+  CHECK(state.custom_length == (uint16_t)sizeof(replacement));
+  expect_bytes(state.custom, state.custom_length, replacement, (uint16_t)sizeof(replacement));
+
+  state.fail_save = true;
+  CHECK(run(&ecu.server,
+            0U,
+            (const uint8_t[]){0x2EU, 0x01U, 0x00U, 0x55U},
+            4U,
+            response,
+            (uint16_t)sizeof(response),
+            &response_length) == UDS_PROCESS_RESPONSE_PENDING);
+  CHECK(UdsEcu_PollPending(&ecu, 20U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 3U);
+  CHECK(response[0] == UDS_SID_NEGATIVE_RESPONSE);
+  CHECK(response[1] == UDS_SID_WRITE_DATA_BY_IDENTIFIER);
+  CHECK(response[2] == UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
+  CHECK(state.save_count == 2U);
+  CHECK(state.custom_length == (uint16_t)sizeof(replacement));
+  expect_bytes(state.custom, state.custom_length, replacement, (uint16_t)sizeof(replacement));
+
+  CHECK(run(&ecu.server, 0U, read_custom, (uint16_t)sizeof(read_custom), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 5U);
+  CHECK(response[3] == replacement[0]);
+  CHECK(response[4] == replacement[1]);
+}
+
+typedef struct
+{
+  uint32_t self_test_calls;
+  uint32_t erase_calls;
+  uint8_t self_test_result;
+  bool erase_result;
+} RoutineHookState_t;
+
+static uint8_t routine_self_test(void *context)
+{
+  RoutineHookState_t *state = (RoutineHookState_t *)context;
+  state->self_test_calls++;
+  return state->self_test_result;
+}
+
+static bool routine_erase(void *context)
+{
+  RoutineHookState_t *state = (RoutineHookState_t *)context;
+  state->erase_calls++;
+  return state->erase_result;
+}
+
+static void test_application_routine_hooks(void)
+{
+  UdsEcu_t ecu;
+  RoutineHookState_t state = {0};
+  UdsEcuHooks_t hooks;
+  const uint8_t session_extended[] = {0x10U, 0x03U};
+  const uint8_t request_seed[] = {0x27U, 0x01U};
+  const uint8_t start_self_test[] = {0x31U, 0x01U, 0x02U, 0x03U};
+  const uint8_t results_self_test[] = {0x31U, 0x03U, 0x02U, 0x03U};
+  const uint8_t start_erase[] = {0x31U, 0x01U, 0xFFU, 0x00U};
+  const uint8_t results_erase[] = {0x31U, 0x03U, 0xFFU, 0x00U};
+  uint8_t response[32] = {0};
+  uint16_t response_length = 0U;
+  uint8_t send_key[6] = {0x27U, 0x02U, 0x00U, 0x00U, 0x00U, 0x00U};
+  uint32_t seed;
+  uint32_t key;
+
+  state.self_test_result =
+      UDS_ECU_SELFTEST_PARAM_FAILURE | UDS_ECU_SELFTEST_CAN_FAILURE;
+  state.erase_result = true;
+  hooks.self_test = routine_self_test;
+  hooks.erase_params = routine_erase;
+  hooks.context = &state;
+
+  UdsEcu_InitWithHooks(&ecu, UDS_ECU_F407, NULL, &hooks);
+  CHECK(run(&ecu.server, 0U, session_extended, (uint16_t)sizeof(session_extended), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, start_self_test, (uint16_t)sizeof(start_self_test), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, results_self_test, (uint16_t)sizeof(results_self_test), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE_PENDING);
+  CHECK(UdsEcu_PollPending(&ecu, 10U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 5U);
+  CHECK(response[2] == 0x02U);
+  CHECK(response[3] == 0x03U);
+  CHECK(response[4] == state.self_test_result);
+  CHECK(state.self_test_calls == 1U);
+
+  CHECK(run(&ecu.server, 0U, request_seed, (uint16_t)sizeof(request_seed), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  seed = ((uint32_t)response[2] << 24U) | ((uint32_t)response[3] << 16U) |
+         ((uint32_t)response[4] << 8U) | (uint32_t)response[5];
+  key = UdsSecurity_ComputeKey(seed, UDS_DEFAULT_SECURITY_SALT);
+  send_key[2] = (uint8_t)(key >> 24U);
+  send_key[3] = (uint8_t)(key >> 16U);
+  send_key[4] = (uint8_t)(key >> 8U);
+  send_key[5] = (uint8_t)key;
+  CHECK(run(&ecu.server, 0U, send_key, (uint16_t)sizeof(send_key), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, start_erase, (uint16_t)sizeof(start_erase), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, results_erase, (uint16_t)sizeof(results_erase), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE_PENDING);
+  CHECK(UdsEcu_PollPending(&ecu, 20U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 5U);
+  CHECK(response[2] == 0xFFU);
+  CHECK(response[3] == 0x00U);
+  CHECK(response[4] == 0x00U);
+  CHECK(state.erase_calls == 1U);
+
+  state.erase_result = false;
+  CHECK(run(&ecu.server, 0U, start_erase, (uint16_t)sizeof(start_erase), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(run(&ecu.server, 0U, results_erase, (uint16_t)sizeof(results_erase), response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE_PENDING);
+  CHECK(UdsEcu_PollPending(&ecu, 30U, response, (uint16_t)sizeof(response), &response_length) == UDS_PROCESS_RESPONSE);
+  CHECK(response_length == 5U);
+  CHECK(response[4] == 0x01U);
+  CHECK(state.erase_calls == 2U);
+}
+
 int main(void)
 {
   test_session_control();
@@ -511,6 +769,8 @@ int main(void)
   test_security_attempt_limit();
   test_routine_sequence_errors();
   test_sequence_error_for_key_without_seed();
+  test_ecu_storage_callbacks();
+  test_application_routine_hooks();
 
   if (failures != 0)
   {

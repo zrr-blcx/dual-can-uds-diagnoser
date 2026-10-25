@@ -22,6 +22,13 @@ static UdsDid_t *UdsServer_FindDid(UdsServer_t *server, uint16_t did)
   return NULL;
 }
 
+static void UdsServer_ClearPendingDid(UdsServer_t *server)
+{
+  server->pending_did_write = false;
+  server->pending_did_index = 0U;
+  server->pending_did_length = 0U;
+}
+
 static uint8_t UdsServer_FindRoutineIndex(const UdsServer_t *server, uint16_t routine_id)
 {
   uint16_t index;
@@ -516,6 +523,31 @@ static UdsProcessResult_t UdsServer_WriteDid(UdsServer_t *server,
                               UDS_NRC_REQUEST_OUT_OF_RANGE);
   }
 
+  if (entry->storage_save != NULL)
+  {
+    if (data_length > UDS_PENDING_DID_DATA_MAX)
+    {
+      return UdsServer_Negative(response,
+                                response_capacity,
+                                response_length,
+                                UDS_SID_WRITE_DATA_BY_IDENTIFIER,
+                                UDS_NRC_REQUEST_OUT_OF_RANGE);
+    }
+
+    UdsServer_ClearPendingDid(server);
+    server->pending_did_write = true;
+    server->pending_did_index = (uint8_t)(entry - server->dids);
+    server->pending_did_length = data_length;
+    for (index = 0U; index < data_length; index++)
+    {
+      server->pending_did_data[index] = request[3U + index];
+    }
+    return UdsServer_ResponsePending(response,
+                                     response_capacity,
+                                     response_length,
+                                     UDS_SID_WRITE_DATA_BY_IDENTIFIER);
+  }
+
   for (index = 0U; index < data_length; index++)
   {
     entry->storage[index] = request[3U + index];
@@ -591,6 +623,40 @@ static UdsProcessResult_t UdsServer_RoutinePositive(uint8_t subfunction,
   return UDS_PROCESS_RESPONSE;
 }
 
+static void UdsServer_ClearPendingRoutine(UdsServer_t *server)
+{
+  server->pending_routine_response = false;
+  server->pending_routine_index = 0U;
+  server->pending_routine_subfunction = 0U;
+  server->pending_routine_suppress_positive = false;
+  server->pending_routine_data_length = 0U;
+}
+
+static void UdsServer_ArmPendingRoutine(UdsServer_t *server,
+                                        uint8_t routine_index,
+                                        uint8_t subfunction,
+                                        bool suppress_positive_response,
+                                        const uint8_t *request_data,
+                                        uint16_t request_data_length)
+{
+  uint16_t index;
+
+  server->pending_routine_response = true;
+  server->pending_routine_index = routine_index;
+  server->pending_routine_subfunction = subfunction;
+  server->pending_routine_suppress_positive = suppress_positive_response;
+
+  if (request_data_length > UDS_PENDING_ROUTINE_DATA_MAX)
+  {
+    request_data_length = UDS_PENDING_ROUTINE_DATA_MAX;
+  }
+  server->pending_routine_data_length = request_data_length;
+  for (index = 0U; index < request_data_length; index++)
+  {
+    server->pending_routine_data[index] = request_data[index];
+  }
+}
+
 static UdsProcessResult_t UdsServer_RoutineControl(UdsServer_t *server,
                                                    const uint8_t *request,
                                                    uint16_t request_length,
@@ -627,6 +693,12 @@ static UdsProcessResult_t UdsServer_RoutineControl(UdsServer_t *server,
                               response_length,
                               UDS_SID_ROUTINE_CONTROL,
                               UDS_NRC_REQUEST_OUT_OF_RANGE);
+  }
+
+  if (server->pending_routine_response &&
+      (server->pending_routine_index == routine_index))
+  {
+    UdsServer_ClearPendingRoutine(server);
   }
 
   if ((subfunction != UDS_ROUTINE_START) &&
@@ -767,6 +839,12 @@ static UdsProcessResult_t UdsServer_RoutineControl(UdsServer_t *server,
 
   if (status == UDS_ROUTINE_RUNNING)
   {
+    UdsServer_ArmPendingRoutine(server,
+                                routine_index,
+                                subfunction,
+                                suppress_positive_response,
+                                &request[4],
+                                (uint16_t)(request_length - 4U));
     return UdsServer_ResponsePending(response,
                                      response_capacity,
                                      response_length,
@@ -971,6 +1049,8 @@ bool UdsServer_Init(UdsServer_t *server, const UdsServerConfig_t *config)
     server->routine_state[index] = (uint8_t)UDS_ROUTINE_IDLE;
     server->routine_result_length[index] = 0U;
   }
+  UdsServer_ClearPendingRoutine(server);
+  UdsServer_ClearPendingDid(server);
 
   return true;
 }
@@ -1096,6 +1176,120 @@ UdsProcessResult_t UdsServer_Process(UdsServer_t *server,
   }
 
   return result;
+}
+
+UdsProcessResult_t UdsServer_PollPending(UdsServer_t *server,
+                                         uint32_t now_ms,
+                                         uint8_t *response,
+                                         uint16_t response_capacity,
+                                         uint16_t *response_length)
+{
+  UdsRoutine_t *routine;
+  UdsRoutineStatus_t status;
+  uint8_t result[UDS_ROUTINE_RESULT_MAX];
+  uint16_t result_length = 0U;
+  uint16_t routine_id;
+
+  (void)now_ms;
+
+  if ((server == NULL) || (response == NULL) || (response_length == NULL))
+  {
+    return UDS_PROCESS_INVALID_ARGUMENT;
+  }
+  *response_length = 0U;
+
+  if (server->pending_did_write)
+  {
+    UdsDid_t *entry;
+
+    if (server->pending_did_index >= server->did_count)
+    {
+      UdsServer_ClearPendingDid(server);
+      return UdsServer_Negative(response,
+                                response_capacity,
+                                response_length,
+                                UDS_SID_WRITE_DATA_BY_IDENTIFIER,
+                                UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
+    }
+
+    entry = &server->dids[server->pending_did_index];
+    if ((entry->storage_save == NULL) ||
+        (entry->storage == NULL) ||
+        (server->pending_did_length > entry->storage_capacity) ||
+        !entry->storage_save(entry->did,
+                             server->pending_did_data,
+                             server->pending_did_length,
+                             entry->storage_context))
+    {
+      UdsServer_ClearPendingDid(server);
+      return UdsServer_Negative(response,
+                                response_capacity,
+                                response_length,
+                                UDS_SID_WRITE_DATA_BY_IDENTIFIER,
+                                UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
+    }
+
+    {
+      uint16_t index;
+      for (index = 0U; index < server->pending_did_length; index++)
+      {
+        entry->storage[index] = server->pending_did_data[index];
+      }
+    }
+    entry->data = entry->storage;
+    entry->length = server->pending_did_length;
+    UdsServer_ClearPendingDid(server);
+    if (response_capacity < 3U)
+    {
+      return UDS_PROCESS_BUFFER_TOO_SMALL;
+    }
+    response[0] = (uint8_t)(UDS_SID_WRITE_DATA_BY_IDENTIFIER + 0x40U);
+    response[1] = (uint8_t)(entry->did >> 8U);
+    response[2] = (uint8_t)(entry->did & 0x00FFU);
+    *response_length = 3U;
+    return UDS_PROCESS_RESPONSE;
+  }
+
+  if (!server->pending_routine_response ||
+      (server->pending_routine_index >= server->routine_count))
+  {
+    return UDS_PROCESS_NO_RESPONSE;
+  }
+
+  routine = &server->routines[server->pending_routine_index];
+  status = routine->handler(UDS_ROUTINE_REQUEST_RESULTS,
+                            server->pending_routine_data,
+                            server->pending_routine_data_length,
+                            result,
+                            (uint16_t)sizeof(result),
+                            &result_length,
+                            routine->context);
+  server->routine_state[server->pending_routine_index] = (uint8_t)status;
+  UdsServer_StoreRoutineResult(server,
+                               server->pending_routine_index,
+                               result,
+                               result_length);
+
+  if (status == UDS_ROUTINE_RUNNING)
+  {
+    return UDS_PROCESS_NO_RESPONSE;
+  }
+
+  routine_id = routine->routine_id;
+  {
+    uint8_t subfunction = server->pending_routine_subfunction;
+    bool suppress = server->pending_routine_suppress_positive;
+
+    UdsServer_ClearPendingRoutine(server);
+    return UdsServer_RoutinePositive(subfunction,
+                                     routine_id,
+                                     result,
+                                     result_length,
+                                     suppress,
+                                     response,
+                                     response_capacity,
+                                     response_length);
+  }
 }
 
 uint8_t UdsServer_GetSession(const UdsServer_t *server)

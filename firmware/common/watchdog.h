@@ -39,6 +39,9 @@
 #define WATCHDOG_WWDG_WINDOW       0x68U
 #define WATCHDOG_WWDG_REFRESH_MS   30U
 
+#define WATCHDOG_STATUS_IWDG_READY 0x01U
+#define WATCHDOG_STATUS_WWDG_READY 0x02U
+
 /* Timeout is rounded down to whole reload ticks. Returns false when the
    request cannot be represented, or when the registers did not settle. */
 bool Watchdog_Init(uint32_t timeout_ms);
@@ -54,5 +57,7 @@ void Watchdog_WwdgService(uint32_t now);
 
 /* Direct refresh, exposed for the deliberate early-refresh self-test. */
 void Watchdog_WwdgKick(void);
+
+uint8_t Watchdog_GetStatus(void);
 
 #endif /* WATCHDOG_H */

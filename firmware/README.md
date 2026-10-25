@@ -30,15 +30,27 @@ The Week 4-5 portable UDS core is implemented in:
 - `firmware/common/uds_server.c`: `0x10`, `0x22`, `0x27`, `0x2E`, `0x31`,
   `0x3E`, DID lookup, security/routine state, S3 timeout, and negative
   responses.
-- `firmware/common/uds_did_db.c`: F407/F103 DID database, writable RAM
-  buffers, and per-ECU VIN/hardware values.
-- `firmware/common/uds_reference_routines.c`: self-test and simulated erase
+- `firmware/common/uds_did_db.c`: F407/F103 DID database and per-ECU
+  VIN/hardware values.
+- `firmware/common/param_store.c/.h`: CRC-protected parameter snapshot.
+- `firmware/common/param_log.c/.h`: append-only snapshot log and startup
+  compaction.
+- `firmware/ecu-f407/Core/Src/app_param_storage.c`: F407 Sector 11 adapter.
+- `firmware/ecu-f103/Core/Src/app_param_storage.c`: F103 last-page adapter.
+- `firmware/common/uds_reference_routines.c`: legacy no-hardware reference
   routine callbacks.
 - `firmware/common/uds_ecu.c`: application-facing wiring for the DID database,
   routines, and server configuration.
 
 The UDS core does not call HAL. Both applications call `UdsEcu_Init` and
-`UdsEcu_Tick`.
+`UdsEcu_Tick`. Responses flagged as `UDS_PROCESS_RESPONSE_PENDING` are sent
+through ISO-TP, then `UdsEcu_PollPending` advances the routine and produces the
+final response without requiring the tester to repeat the request.
+
+F407 reserves Flash Sector 11 (`0x080E0000-0x080FFFFF`); F103 reserves its last
+1 KB page (`0x0800FC00-0x0800FFFF`). Runtime DID writes append 80-byte snapshots
+and never erase flash; startup compaction runs before the IWDG and WWDG are
+enabled. Routine `0xFF00` appends an empty snapshot as a logical parameter clear.
 
 The Week 3 ISO-TP core is implemented in:
 
