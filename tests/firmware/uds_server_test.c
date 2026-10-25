@@ -9,9 +9,9 @@ static const uint8_t hardware_version[] = "F407-HW-REV-A";
 static const uint8_t custom_data[] = {0xDE, 0xAD, 0xBE, 0xEF};
 
 static UdsDid_t dids[] = {
-    {0xF190U, vin, (uint16_t)(sizeof(vin) - 1U), NULL, 0U, 0U, 0U, 0U, false},
-    {0xF193U, hardware_version, (uint16_t)(sizeof(hardware_version) - 1U), NULL, 0U, 0U, 0U, 0U, false},
-    {0x0100U, custom_data, (uint16_t)sizeof(custom_data), NULL, 0U, 0U, 0U, 0U, false},
+    {0xF190U, vin, (uint16_t)(sizeof(vin) - 1U), NULL, 0U, 0U, 0U, 0U, false, NULL, NULL, NULL},
+    {0xF193U, hardware_version, (uint16_t)(sizeof(hardware_version) - 1U), NULL, 0U, 0U, 0U, 0U, false, NULL, NULL, NULL},
+    {0x0100U, custom_data, (uint16_t)sizeof(custom_data), NULL, 0U, 0U, 0U, 0U, false, NULL, NULL, NULL},
 };
 
 static int failures = 0;
@@ -237,8 +237,8 @@ static void test_buffer_limits_and_validation(void)
   UdsServer_t server;
   UdsServerConfig_t config = {0};
   UdsDid_t duplicate_dids[] = {
-      {0xF190U, vin, (uint16_t)(sizeof(vin) - 1U), NULL, 0U, 0U, 0U, 0U, false},
-      {0xF190U, custom_data, (uint16_t)sizeof(custom_data), NULL, 0U, 0U, 0U, 0U, false},
+      {0xF190U, vin, (uint16_t)(sizeof(vin) - 1U), NULL, 0U, 0U, 0U, 0U, false, NULL, NULL, NULL},
+      {0xF190U, custom_data, (uint16_t)sizeof(custom_data), NULL, 0U, 0U, 0U, 0U, false, NULL, NULL, NULL},
   };
   const uint8_t request[] = {0x22U, 0xF1U, 0x90U};
   uint8_t response[2] = {0};
