@@ -9,6 +9,18 @@
 - Add ISO-TP multi-frame transport and UDS core services.
 - Add DBC generation and signal struct generation.
 - Add dual-node scheduler, bus load, stress, and fault injection tools.
+- Route two physical diagnostic clients through one CAN device and send stress
+  background traffic on that shared bus.
+- Add `dual-node-smoke` and validate 20 concurrent read-only scheduler requests
+  per node on the real F407/F103 CAN bus.
+- Add `session-conflict` and validate real programming-session exclusion,
+  skip-before-execution behavior and post-release recovery.
+- Add isolated DBC bench frames and live cantools verification for `0x180` and
+  `0x280`, with formal firmware and F407 Sector 11 restored afterward.
+- Add per-node configurable stress intervals, low-priority `0x7F0` background
+  frames, and separate UDS timeout versus physical gap metrics.
+- Add board-internal 90%+ stress modes, background sequence probes, test-only
+  DTC/NRC/communication-loss hooks, and bidirectional hardware results.
 - Add virtual ECU and memory bus for hardware-free validation.
 - Add CAN error-state monitoring, Bus-Off recovery policy, and watchdog supervision.
 - Add repeated virtual Bus-Off injection with health reporting and CLI tests.

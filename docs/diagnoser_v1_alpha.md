@@ -83,6 +83,9 @@ python -m diagnoser.cli --config configs/canable.gsusb.example.json read-did --n
 | `security` | 执行 `0x27` Seed/Key |
 | `uds-smoke` | 第 4 周单节点冒烟流程 |
 | `uds-week5` | `10 03 -> 27 01 -> 27 02 -> 2E -> 31` 全流程 |
+| `dual-node-smoke` | 一条共享 CAN 通道并发读取两个节点，并校验响应 ID 与会话恢复 |
+| `session-conflict` | 验证一个节点占用 `0x02` 时，另一节点编程任务被跳过并可恢复 |
+| `dbc-verify` | 捕获并解码 `0x180/0x280` DBC 测试帧，校验固定信号值 |
 | `demo` | 虚拟双节点演示 |
 | `stress` | 双节点压力测试 |
 | `fault` | DTC/通信丢失/Bus-Off/NRC 故障注入 |
@@ -124,8 +127,11 @@ python -m diagnoser.cli --config configs/canable.example.json --channel COMx tra
   `UdsClient(handle_response_pending=False)`；此时 `0x78` 会作为
   `NegativeResponse` 抛出，并把完整交换信息挂在 `exc.exchange`。
 - ISO-TP 接收超时后按 `retries` 重发；`--retries 0` 关闭重发。
+- `--stmin-ms` 和 `--block-size` 控制客户端 FC 参数；压力测试可降至 1 ms。
 - Bus-Off 与压力测试会临时把 `retries` 置 0，避免重发掩盖离线窗口或污染
   丢帧/超时统计。
+- PC `stress` 使用每节点请求数和请求启动间隔；高负载板内测试使用独立
+  `-StressMaster` 镜像，避免单只 slcan 适配器接收饱和。
 - Extended/Programming 会话由 `0x3E` 或有效请求刷新 S3，超时自动回 Default。
 
 ## 输出格式

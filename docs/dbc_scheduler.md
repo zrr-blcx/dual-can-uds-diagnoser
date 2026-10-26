@@ -2,17 +2,25 @@
 
 ## 状态
 
-第 7 周可在主机侧完成的部分已经落地：
+第 7 周主机侧与真实硬件验收均已完成：
 
 - 项目 DBC：`dbc/project.dbc`，可用 cantools 解析。
 - DBC -> C 生成器：`diagnoser/dbc/codegen.py`。
 - 生成代码：`firmware/common/project_dbc.h` / `.c`，含结构体、pack/unpack。
 - 双节点队列调度器：`diagnoser/tools/scheduler.py` 中的
   `QueuedDualNodeScheduler`。
+- 多节点 CLI 共享一个物理 CAN 设备：`diagnoser/transport/shared.py`
+  按响应 ID 将接收帧分发到独立队列。
+- 2026-10-26 实机共享通道 `dual-node-smoke`：F407/F103 各 20 次并发读取，
+  均通过 `0x7E8/0x7E9` 独立返回并恢复 Default 会话。
+- 2026-10-26 实机 `session-conflict`：F407 占用 `0x02` 时 F103 任务被跳过，
+  锁释放后 F103 恢复读取，两节点最终回到 Default。
+- 2026-10-26 DBC 测试镜像：`0x180` 与 `0x280` 各捕获 27 帧，
+  Motorola/Intel 信号解码值与预期一致。
 - 主机测试：DBC round-trip、Motorola/Intel 生成代码、每节点串行、
   超时重试、会话跳过、诊断仪 -> 调度器 -> 双 VirtualEcu 全链路。
 
-真实 F407/F103 的最终 DBC 联调仍为 Target；当前结论只覆盖主机侧和虚拟总线。
+真实共享总线、并发调度、编程会话互斥和 DBC 信号联调均已验证。
 
 ## 项目 DBC
 
@@ -114,14 +122,73 @@ scheduler.close()
 - 两个编程会话任务互斥；等待超时的任务标记 `skipped`。
 - `run_uds_week5` 通过调度器分别驱动两个 VirtualEcu，双方 13 步全流程 PASS。
 
+## 物理共享总线
+
+真实 CANable 通常不能被多个 `UdsClient` 重复打开。多节点 CLI 现在复用一条
+`python-can` 总线：
+
+- `SharedCanBus` 只有一个底层接收线程。
+- `0x7E8` 和 `0x7E9` 分别进入独立队列，其他节点不会消费或丢弃彼此的响应。
+- 发送操作共用一把锁，诊断请求和压力测试背景帧可以共用同一物理适配器。
+- `stress` 在非内存接口下使用同一个共享总线产生背景负载，不再另建
+  `MemoryBus`。
+
+`tests/test_shared_can_bus.py` 覆盖按 ID 分发和两个 ISO-TP 客户端共用底层
+总线；`tests/test_cli.py` 覆盖多节点只调用一次总线工厂。
+
+## DBC 实机验证
+
+F407 和 F103 使用隔离的 `-DbcBench` 镜像分别发送：
+
+| Message | CAN ID | Signals | Frames in 3 s | Result |
+| --- | --- | --- | ---: | --- |
+| EngineData | `0x180` | 1234.5 rpm / 85 degC | 27 | PASS |
+| VehicleStatus | `0x280` | 42.5 km/h / brake active | 27 | PASS |
+
+抓包由 cantools 直接解码。测试后恢复正式固件，并再次通过双节点 20/20
+读取；F407 Sector 11 哈希未变化。
+
+## 实机共享通道冒烟
+
+`dual-node-smoke` 通过 `QueuedDualNodeScheduler` 同时驱动两个客户端：
+
+- 每个节点进入 Extended 会话。
+- 每节点读取指定 DID 的请求次数一致。
+- 校验响应 ID 只能是本节点的 `0x7E8` 或 `0x7E9`。
+- 完成后恢复 Default 会话。
+
+2026-10-26 使用真实 CANable 在 500 kbps 下测得：
+
+| Node | Requests | Success | Response ID | Session restored |
+| --- | ---: | ---: | --- | --- |
+| F407 | 20 | 20 | `0x7E8` | PASS |
+| F103 | 20 | 20 | `0x7E9` | PASS |
+
+## 实机编程会话冲突
+
+`session-conflict` 让第一个节点在 Extended 之后进入 Programming 并保持
+`hold-seconds`，第二个节点的 `0x02` 任务等待 `wait-timeout` 后由调度器跳过。
+若冲突任务仍被调度，测试会单独记录该错误。
+
+2026-10-26 真实硬件结果：
+
+| Check | Result |
+| --- | --- |
+| F407 进入 `0x02` | PASS |
+| F103 冲突任务跳过 | PASS |
+| 冲突任务未执行 | PASS |
+| F407 恢复 Default | PASS |
+| F103 恢复读取 | PASS |
+
 ## 运行验证
 
 ```powershell
 .venv\Scripts\python.exe -m pytest tests\test_dbc_generator.py tests\test_dbc_codegen.py tests\test_scheduler.py tests\test_queued_scheduler.py
+.venv\Scripts\python.exe -m pytest tests\test_shared_can_bus.py tests\test_cli.py
+.venv\Scripts\python.exe -m diagnoser.cli --interface slcan --channel COMx --retries 0 dual-node-smoke --requests-per-node 20
+.venv\Scripts\python.exe -m diagnoser.cli --interface slcan --channel COMx --retries 0 session-conflict
 ```
 
 未完成项：
 
-- 真实 F407/F103 上的 DBC 信号联调与总线时序复验。
-- 真实硬件上调度器与 CANable 的并发/会话竞争验证。
-- 本阶段不修改 Roadmap 第 7 周状态，继续保留 Target。
+- 无。第 7 周里程碑已完成，Roadmap 状态已更新。

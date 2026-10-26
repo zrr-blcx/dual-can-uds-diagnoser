@@ -7,6 +7,8 @@
   "p2_ms": 50,
   "p2_star_ms": 5000,
   "retries": 1,
+  "stmin_ms": 20,
+  "block_size": 8,
   "ecus": [
     {"name": "ecu1", "request_id": "0x7E0", "response_id": "0x7E8"},
     {"name": "ecu2", "request_id": "0x7E1", "response_id": "0x7E9"}

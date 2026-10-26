@@ -57,6 +57,11 @@ The Week 3 ISO-TP core is implemented in:
 - `firmware/common/isotp.h/.c`: SF/FF/CF/FC, sender/receiver state machines,
   BS/STmin flow control, and `N_As/N_Bs/N_Cr/N_Ar` timeouts.
 - `firmware/common/isotp_bench.h/.c`: fixed 100-byte hardware bench payload.
+- `firmware/common/project_dbc.c/.h`: generated DBC signal codecs.
+- `firmware/common/dbc_bench.c/.h`: isolated `EngineData`/`VehicleStatus` senders.
+- `firmware/common/background_probe.c/.h`: background sequence-gap counters.
+- `firmware/common/uds_fault_test.c/.h`: test-only DTC/NRC/comm-loss hook.
+- `firmware/common/stress_master.c/.h`: board-internal UDS and load test helper.
 
 Both applications route diagnostic frames through `Isotp_RouteFrame()`, pass
 reassembled requests to `UdsEcu_Process`, and transmit the response through the
@@ -76,6 +81,20 @@ discovery cannot find the toolchain.
 Build the 100-byte node bench variants with `-IsotpBenchTx` or
 `-IsotpBenchRx`.
 
+Isolated Week 7/8 hardware modes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -DbcBench
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -DbcBench
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -BenchTest
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -BenchTest
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -StressMaster
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -StressMaster
+```
+
+These switches are mutually exclusive where they change bus behavior. Formal
+builds must be rebuilt and reflashed after hardware tests.
+
 The build scripts use the GNU ARM GCC bundled with STM32CubeIDE and emit
 ELF, BIN, and HEX files under each node's `Build/` directory.
 
@@ -89,10 +108,8 @@ Application
   -> STM32 HAL
 ```
 
-Status: Week 1 CAN baseline and Week 2 health/Bus-Off work are complete. The
-Week 3 ISO-TP software core, CAN RX queue, error-state handling, and host tests
-are implemented. Final candidate bidirectional hardware and formal UDS regression
-pass, including wrong-SN recovery, 120-byte SN wrap and timeout injection.
-The Week 3 milestone is complete. See
-`docs/isotp_protocol_contract.md`, `docs/isotp_week3.md`, and
-`docs/ROADMAP.md`.
+Status: Weeks 1-8 are complete. DBC codecs and hardware signals, shared-bus
+scheduling, session exclusion, low-load baseline, 90%+ stress and test-only
+fault injection have hardware evidence. Formal firmware is restored after
+test-image runs. See `docs/dbc_scheduler.md`, `docs/week8_stress_fault.md`,
+`docs/test_report.md`, and `docs/ROADMAP.md`.

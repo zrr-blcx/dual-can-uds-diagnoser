@@ -12,7 +12,7 @@
 
 ## Status
 
-- Project progress: Weeks 1-6 are complete; Weeks 7-10 remain on the roadmap.
+- Project progress: Weeks 1-8 are complete; Weeks 9-10 remain on the roadmap.
 - Week 1: F407/F103 CAN1 at 500 kbps, dual-node frame exchange and hardware
   baseline complete.
 - Week 2 CAN health and Bus-Off recovery: SCE error handling, IWDG,
@@ -27,9 +27,17 @@
   parameter clear, pending responses and the dual-node NRC matrix complete.
 - Week 6: diagnostic tool V1.0 Alpha with P2/P2* timing, `0x78` handling,
   retries, timestamped/JSON output and full F407/F103 CANable validation.
+- Week 7 shared-bus scheduler smoke: 20 read-only requests per node through
+  one CANable, with independent `0x7E8/0x7E9` responses and session restore.
+- Week 7 programming-session exclusion: the waiting node is skipped without
+  executing a conflicting `0x02` request, then recovers after lock release.
+- Week 7 DBC hardware validation: `0x180` and `0x280` decoded on the real bus;
+  formal firmware and F407 parameter storage restored intact.
+- Week 8 low-load baseline: 2000/2000 requests, zero physical background gaps.
+- Week 8 stress/fault injection: 94.4% load in both directions with degradation
+  recorded separately; DTC, NRC, communication loss and Bus-Off coverage.
 - CI: Python 3.10-3.14 plus F407/F103 ARM firmware builds.
-- Unfinished Week 7-10 acceptance metrics remain marked `Target` in the
-  roadmap.
+- Week 9-10 acceptance metrics remain marked `Target` in the roadmap.
 
 ## 核心能力
 
@@ -79,10 +87,12 @@ py -3.14 -m diagnoser.cli read-did --node ecu1 0xF190
 py -3.14 -m diagnoser.cli security --node ecu1
 py -3.14 -m diagnoser.cli write-did --node ecu1 --session 0x03 --unlock 0xF191 01020304
 py -3.14 -m diagnoser.cli routine --node ecu1 --session 0x03 --unlock 0x0203
-py -3.14 -m diagnoser.cli stress --frames 1000 --load 0.9
+py -3.14 -m diagnoser.cli stress --requests-per-node 1000 --interval-ms 100 --load 0.1
 py -3.14 -m diagnoser.cli bus-off-test --cycles 3 --seconds 0.2
 py -3.14 -m diagnoser.cli uds-smoke --node ecu1
 py -3.14 -m diagnoser.cli uds-week5 --node ecu1
+py -3.14 -m diagnoser.cli dual-node-smoke --requests-per-node 20
+py -3.14 -m diagnoser.cli session-conflict
 py -3.14 -m diagnoser.cli --json read-did --node ecu1 0xF190
 py -3.14 -m diagnoser.cli --retries 2 --p2-star 5000 read-did --node ecu1 0xF190
 ```
@@ -111,6 +121,9 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 
 第 5 周安全访问、持久化、自检与参数清除见
 [docs/uds_week5.md](docs/uds_week5.md)。
+
+第 8 周基线、90%+ 板内压力测试和故障注入结果见
+[docs/week8_stress_fault.md](docs/week8_stress_fault.md)。
 
 全量测试结果与实机证据见
 [docs/test_report.md](docs/test_report.md)。

@@ -1,10 +1,14 @@
 #include "main.h"
 #include "app_param_storage.h"
+#include "background_probe.h"
 #include "can_driver.h"
 #include "can_health.h"
+#include "dbc_bench.h"
 #include "isotp.h"
 #include "isotp_bench.h"
+#include "stress_master.h"
 #include "uds_ecu.h"
+#include "uds_fault_test.h"
 #include "watchdog.h"
 
 #define APP_CAN_ID               0x123U
@@ -40,6 +44,23 @@
    The shipped value is 0. */
 #ifndef APP_CAN_FAST_TX_TEST
 #define APP_CAN_FAST_TX_TEST 0U
+#endif
+#ifndef APP_DBC_BENCH
+#define APP_DBC_BENCH 0U
+#endif
+#ifndef APP_BENCH_TEST
+#define APP_BENCH_TEST 0U
+#endif
+#ifndef APP_STRESS_MASTER
+#define APP_STRESS_MASTER 0U
+#endif
+#if APP_STRESS_MASTER
+#define APP_STRESS_REQUEST_ID    0x7E0U
+#define APP_STRESS_RESPONSE_ID   0x7E8U
+#define APP_STRESS_REQUESTS      1000U
+#define APP_STRESS_INTERVAL_US   20000U
+#define APP_STRESS_RESPONSE_US   50000U
+#define APP_STRESS_BG_PERIOD_US  228U
 #endif
 #if APP_CAN_FAST_TX_TEST
 #define APP_CAN_TX_PERIOD_MS     20U
@@ -97,6 +118,17 @@ static uint8_t g_isotp_tx_buffer[APP_ISOTP_TX_BUFFER_SIZE];
 static uint8_t g_isotp_rx_buffer[APP_ISOTP_RX_BUFFER_SIZE];
 static IsotpRx_t g_isotp_rx;
 static IsotpTx_t g_isotp_tx;
+#if APP_BENCH_TEST
+BackgroundProbe_t g_background_probe;
+UdsFaultTest_t g_uds_fault_test;
+#endif
+#if APP_STRESS_MASTER
+StressMasterStats_t g_stress_master;
+volatile uint8_t g_stress_response_seen;
+#endif
+#if APP_DBC_BENCH
+static DbcBench_t g_dbc_bench;
+#endif
 
 typedef struct
 {
@@ -160,6 +192,9 @@ static void APP_UpdateHealthSummary(void);
 static void APP_HealthLog(uint8_t kind, uint8_t arg);
 static uint8_t APP_UdsSelfTest(void *context);
 static bool APP_UdsEraseParams(void *context);
+#if APP_STRESS_MASTER
+static void APP_RunStressMaster(void);
+#endif
 static void APP_ServiceIsotp(uint32_t now);
 static bool APP_IsotpSend(void *ctx, uint32_t txid, const uint8_t data[8U]);
 static bool APP_IsotpTxPending(void *ctx);
@@ -200,6 +235,14 @@ int main(void)
                        AppParamStorage_GetUdsStorage(&g_param_storage),
                        &g_uds_hooks);
 
+#if APP_DBC_BENCH
+  DbcBench_Init(&g_dbc_bench, DBC_BENCH_F103, 100U);
+#endif
+#if APP_BENCH_TEST
+  BackgroundProbe_Init(&g_background_probe);
+  UdsFaultTest_Init(&g_uds_fault_test);
+#endif
+
   /* ISO-TP transport endpoints bound to the CAN driver. */
   {
     IsotpChannel_t isotp_channel = {0};
@@ -233,6 +276,10 @@ int main(void)
     Error_Handler();
   }
 
+#if APP_STRESS_MASTER
+  APP_RunStressMaster();
+#endif
+
   while (1)
   {
     static uint32_t last_tx_tick = 0U;
@@ -242,6 +289,18 @@ int main(void)
     CanDriver_ProcessRx(&g_can);
     UdsEcu_Tick(&g_uds, now);
     APP_ServiceIsotp(now);
+
+#if APP_DBC_BENCH
+    {
+      uint32_t dbc_id;
+      uint8_t dbc_data[8];
+
+      if (DbcBench_Poll(&g_dbc_bench, now, &dbc_id, dbc_data))
+      {
+        (void)CanDriver_SendStd(&g_can, dbc_id, dbc_data, 8U);
+      }
+    }
+#endif
 
     if ((now - last_tx_tick) >= APP_CAN_TX_PERIOD_MS)
     {
@@ -264,7 +323,11 @@ int main(void)
     Watchdog_WwdgService(now);
 #endif
 
+#if APP_BENCH_TEST
+    HAL_Delay(1U);
+#else
     HAL_Delay(10U);
+#endif
   }
 }
 
@@ -324,6 +387,31 @@ static void APP_CAN_Send(uint8_t value)
 
 static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len)
 {
+#if APP_STRESS_MASTER
+  if (!g_stress_response_seen &&
+      (StressMaster_AcceptResponse(&g_stress_master,
+                                   id,
+                                   data,
+                                   (uint8_t)len,
+                                   APP_STRESS_RESPONSE_ID)))
+  {
+    g_stress_response_seen = 1U;
+  }
+  return;
+#endif
+
+#if APP_BENCH_TEST
+  if (id == 0x7F0U && len == 8U)
+  {
+    uint32_t sequence = ((uint32_t)data[0] << 24U) |
+                        ((uint32_t)data[1] << 16U) |
+                        ((uint32_t)data[2] << 8U) |
+                        (uint32_t)data[3];
+    BackgroundProbe_OnFrame(&g_background_probe, sequence);
+    return;
+  }
+#endif
+
   if (id == APP_CAN_ID && len >= 1U)
   {
     g_can_rx_count++;
@@ -402,18 +490,35 @@ static void APP_ServiceIsotp(uint32_t now)
   {
     uint8_t request[APP_ISOTP_RX_BUFFER_SIZE];
     uint16_t request_length = 0U;
-    UdsProcessResult_t result;
+    UdsProcessResult_t result = UDS_PROCESS_NO_RESPONSE;
+    UdsFaultAction_t fault_action = UDS_FAULT_PASS;
 
     if (IsotpRx_Read(&g_isotp_rx, request, sizeof(request), &request_length) == ISOTP_OK)
     {
-      result = UdsEcu_Process(&g_uds, now, request, request_length,
-                              g_isotp_tx_buffer, sizeof(g_isotp_tx_buffer),
-                              &response_length);
-      if (((result == UDS_PROCESS_RESPONSE) ||
-           (result == UDS_PROCESS_RESPONSE_PENDING)) &&
-          (response_length > 0U))
+#if APP_BENCH_TEST
+      fault_action = UdsFaultTest_Process(&g_uds_fault_test,
+                                          request,
+                                          request_length,
+                                          now,
+                                          g_isotp_tx_buffer,
+                                          sizeof(g_isotp_tx_buffer),
+                                          &response_length);
+#endif
+      if (fault_action == UDS_FAULT_PASS)
       {
-        if (IsotpTx_Start(&g_isotp_tx, g_isotp_tx_buffer, response_length) == ISOTP_OK)
+        result = UdsEcu_Process(&g_uds, now, request, request_length,
+                                g_isotp_tx_buffer, sizeof(g_isotp_tx_buffer),
+                                &response_length);
+      }
+      if ((fault_action == UDS_FAULT_HANDLED) ||
+          ((fault_action == UDS_FAULT_PASS) &&
+           ((result == UDS_PROCESS_RESPONSE) ||
+            (result == UDS_PROCESS_RESPONSE_PENDING))))
+      {
+        if ((response_length > 0U) &&
+            (IsotpTx_Start(&g_isotp_tx,
+                           g_isotp_tx_buffer,
+                           response_length) == ISOTP_OK))
         {
           g_isotp_serving = true;
         }
@@ -680,6 +785,155 @@ static void APP_UpdateHealthSummary(void)
                               : (uint8_t)g_can_health_full.recovery_successes;
   g_can_health_summary[3] = g_can_health_full.consecutive_recovery_failures;
 }
+
+#if APP_STRESS_MASTER
+static void APP_StressCycleInit(void)
+{
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0U;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+static uint32_t APP_StressCycles(void)
+{
+  return DWT->CYCCNT;
+}
+
+static bool APP_StressBefore(uint32_t left, uint32_t right)
+{
+  return (int32_t)(left - right) < 0;
+}
+
+static void APP_StressServiceWatchdog(void)
+{
+  static uint32_t last_service_ms = 0U;
+  uint32_t now = HAL_GetTick();
+
+  if ((uint32_t)(now - last_service_ms) >= 10U)
+  {
+    last_service_ms = now;
+    Watchdog_Kick();
+    Watchdog_WwdgService(now);
+  }
+}
+
+static void APP_StressServiceBackground(uint32_t now,
+                                        uint32_t *next_background,
+                                        uint32_t *sequence,
+                                        uint32_t cycles_per_us)
+{
+  uint8_t frame[8];
+  const uint32_t period = APP_STRESS_BG_PERIOD_US * cycles_per_us;
+
+  if (!APP_StressBefore(now, *next_background))
+  {
+    uint32_t late = now - *next_background;
+    if (late >= period)
+    {
+      uint32_t skipped = late / period;
+      g_stress_master.background_missed += skipped;
+      *sequence += skipped;
+      *next_background += skipped * period;
+    }
+
+    StressMaster_BuildBackground(*sequence, frame);
+    (*sequence)++;
+    if (CanDriver_SendStd(&g_can, 0x7F0U, frame, 8U) == HAL_OK)
+    {
+      g_stress_master.background_sent++;
+    }
+    else
+    {
+      g_stress_master.background_missed++;
+    }
+    *next_background += period;
+  }
+}
+
+static void APP_RunStressMaster(void)
+{
+  uint8_t request[8];
+  uint32_t cycles_per_us = SystemCoreClock / 1000000U;
+  uint32_t request_period = APP_STRESS_INTERVAL_US * cycles_per_us;
+  uint32_t response_timeout = APP_STRESS_RESPONSE_US * cycles_per_us;
+  uint32_t now;
+  uint32_t request_due;
+  uint32_t next_background;
+  uint32_t sequence = 0U;
+  uint32_t test_started;
+
+  StressMaster_Init(&g_stress_master, APP_STRESS_REQUESTS);
+  APP_StressCycleInit();
+  now = APP_StressCycles();
+  test_started = now;
+  request_due = now;
+  next_background = now;
+  StressMaster_BuildRequest(request);
+
+  while (g_stress_master.requests_sent < g_stress_master.requests_target)
+  {
+    uint32_t request_started;
+    uint32_t response_deadline;
+
+    while (APP_StressBefore(APP_StressCycles(), request_due))
+    {
+      now = APP_StressCycles();
+      APP_StressServiceBackground(now,
+                                  &next_background,
+                                  &sequence,
+                                  cycles_per_us);
+      CanDriver_ProcessRx(&g_can);
+      APP_StressServiceWatchdog();
+    }
+
+    g_stress_response_seen = 0U;
+    request_started = APP_StressCycles();
+    StressMaster_RecordRequest(&g_stress_master);
+    (void)CanDriver_SendStd(&g_can,
+                            APP_STRESS_REQUEST_ID,
+                            request,
+                            8U);
+    response_deadline = request_started + response_timeout;
+    request_due += request_period;
+
+    while (!g_stress_response_seen &&
+           APP_StressBefore(APP_StressCycles(), response_deadline))
+    {
+      now = APP_StressCycles();
+      APP_StressServiceBackground(now,
+                                  &next_background,
+                                  &sequence,
+                                  cycles_per_us);
+      CanDriver_ProcessRx(&g_can);
+      APP_StressServiceWatchdog();
+    }
+
+    if (g_stress_response_seen)
+    {
+      StressMaster_RecordLatency(&g_stress_master,
+                                 APP_StressCycles() - request_started);
+    }
+    else
+    {
+      StressMaster_RecordTimeout(&g_stress_master);
+    }
+
+    if (APP_StressBefore(APP_StressCycles(), request_due))
+    {
+      continue;
+    }
+    request_due = APP_StressCycles();
+  }
+
+  g_stress_master.runtime_cycles = APP_StressCycles() - test_started;
+  StressMaster_Finish(&g_stress_master);
+  while (1)
+  {
+    CanDriver_ProcessRx(&g_can);
+    APP_StressServiceWatchdog();
+  }
+}
+#endif
 
 void Error_Handler(void)
 {

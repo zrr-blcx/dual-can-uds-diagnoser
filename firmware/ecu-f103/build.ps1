@@ -5,7 +5,10 @@
     [switch]$IsotpForceTxBusy,
     [switch]$ParamSaveFailureTest,
     [switch]$WwdgSelfTest,
-    [switch]$WwdgEarlyFeedTest
+    [switch]$WwdgEarlyFeedTest,
+    [switch]$DbcBench,
+    [switch]$BenchTest,
+    [switch]$StressMaster
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +93,24 @@ if ($WwdgEarlyFeedTest) {
     $commonFlags += '-DAPP_WWDG_EARLY_FEED_TEST=1U'
     Write-Host 'WWDG EARLY FEED TEST: refresh before the window opens'
 }
+if ($DbcBench) {
+    $commonFlags += '-DAPP_DBC_BENCH=1U'
+    Write-Host 'DBC BENCH: F103 VehicleStatus on 0x280'
+}
+if ($BenchTest) {
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx) {
+        throw 'BenchTest cannot be combined with DBC or ISO-TP bench modes.'
+    }
+    $commonFlags += '-DAPP_BENCH_TEST=1U'
+    Write-Host 'BENCH TEST: background sequence probe and UDS fault hook'
+}
+if ($StressMaster) {
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $BenchTest) {
+        throw 'StressMaster must be built as its own test mode.'
+    }
+    $commonFlags += '-DAPP_STRESS_MASTER=1U'
+    Write-Host 'STRESS MASTER: 90% background load and F407 UDS test'
+}
 
 $sources = @()
 $commonRoot = Join-Path $repoRoot 'firmware/common'
@@ -108,6 +129,17 @@ $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_server.c')
 $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_reference_routines.c')
 $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_did_db.c')
 $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_ecu.c')
+if ($DbcBench) {
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'project_dbc.c')
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'dbc_bench.c')
+}
+if ($BenchTest) {
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'background_probe.c')
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'uds_fault_test.c')
+}
+if ($StressMaster) {
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'stress_master.c')
+}
 
 $halNames = @(
     'stm32f1xx_hal.c',

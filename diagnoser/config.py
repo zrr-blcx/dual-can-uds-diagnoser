@@ -35,6 +35,8 @@ class NetworkConfig:
     p2_ms: float = 50.0
     p2_star_ms: float = 5000.0
     retries: int = 1
+    stmin_ms: int = 20
+    block_size: int = 8
     ecus: list[EcuConfig] = field(default_factory=list)
 
     @classmethod
@@ -48,6 +50,8 @@ class NetworkConfig:
             p2_ms=float(raw.get("p2_ms", 50.0)),
             p2_star_ms=float(raw.get("p2_star_ms", 5000.0)),
             retries=int(raw.get("retries", 1)),
+            stmin_ms=int(raw.get("stmin_ms", 20)),
+            block_size=int(raw.get("block_size", 8)),
             ecus=[EcuConfig.from_dict(item) for item in raw.get("ecus", [])],
         )
 
@@ -73,6 +77,8 @@ def default_network() -> NetworkConfig:
         p2_ms=50.0,
         p2_star_ms=5000.0,
         retries=1,
+        stmin_ms=20,
+        block_size=8,
         ecus=[
             EcuConfig(name="ecu1", request_id=0x7E0, response_id=0x7E8),
             EcuConfig(name="ecu2", request_id=0x7E1, response_id=0x7E9),

@@ -69,7 +69,7 @@ STM32 HAL
 | 0xF193 | Hardware version | ECU-specific |
 | 0xF19A | ECU name | ECU-specific |
 | 0xF19B | Software version | ECU-specific |
-| 0xF1A0 | Fault control | VirtualBus injection hook only |
+| 0xF1A0 | Fault control | Virtual ECU and isolated `BenchTest` firmware only |
 
 The portable UDS core in `firmware/common/uds_server.c` implements request
 dispatch, `0x10`, `0x22`, `0x27`, `0x2E`, `0x31`, `0x3E`, S3 timeout, DID
@@ -82,9 +82,16 @@ F407/F103 node-to-node ISO-TP, UDS, persistence and NRC acceptance are complete.
 
 ## Scheduling and Fault Injection
 
+- Multi-node CLI opens one physical python-can device, routes response IDs to
+  isolated queues, and serializes all outgoing frames through that device.
 - Per-node request locks serialize access to each ECU.
 - Programming session is exclusive across nodes to avoid session conflicts.
 - Bus load simulator targets 90%+ with periodic background frames.
+- PC stress uses low-priority `0x7F0`; for the accepted 90%+ run, an MCU test
+  image generated the load so the slcan tester was not the receive bottleneck.
+- Test images can expose per-node background sequence gaps through ST-Link.
+- DBC, background-probe and hardware fault-hook code is excluded from formal
+  firmware builds.
 - Fault injector covers DTC, communication loss, NRC injection, and Bus-Off.
 - Stress metrics distinguish physical CAN frame loss from UDS request timeouts.
 

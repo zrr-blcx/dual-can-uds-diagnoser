@@ -62,7 +62,7 @@ UDS 核心通过 `UdsServerConfig_t` 接收 DID 表、例程表、P2、P2*、S3 
 | `0x0100` | 自定义数据 | `00 01` | Extended/Programming + 解锁，最多 16 字节 |
 | `0xF191` | DTC 状态 | `00 00 00 00` | Extended/Programming + 解锁，4 字节 |
 | `0xF192` | CAN 健康快照 | 7 字节动态数据 | 仅虚拟 ECU |
-| `0xF1A0` | 虚拟故障控制 | 测试钩子 | 仅虚拟 ECU，Default 会话可用 |
+| `0xF1A0` | 故障控制 | 测试钩子 | 仅虚拟 ECU 和隔离 `BenchTest` 镜像，正式固件不包含 |
 
 Python DID 常量集中在 `diagnoser/uds/dids.py`，避免客户端、虚拟 ECU 和测试
 各自维护不同编号。

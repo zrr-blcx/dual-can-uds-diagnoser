@@ -1,6 +1,7 @@
 import json
 
-from diagnoser.cli import main
+from can_test_fakes import QueueBus
+from diagnoser.cli import _network, _open_clients, build_parser, main
 
 
 def test_cli_demo_smoke() -> None:
@@ -26,6 +27,33 @@ def test_cli_bus_off_test_smoke() -> None:
 
 def test_cli_uds_week5_smoke() -> None:
     assert main(["uds-week5", "--node", "ecu1"]) == 0
+
+
+def test_cli_dual_node_smoke(capsys) -> None:
+    assert main(["dual-node-smoke", "--requests-per-node", "2"]) == 0
+
+    output = capsys.readouterr().out
+    assert "Dual-Node Shared-Bus Smoke Test" in output
+    assert "PASS" in output
+
+
+def test_cli_session_conflict(capsys) -> None:
+    assert (
+        main(
+            [
+                "session-conflict",
+                "--hold-seconds",
+                "0.2",
+                "--wait-timeout",
+                "0.05",
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "Programming Session Conflict Test" in output
+    assert "PASS" in output
 
 
 def test_cli_security_smoke() -> None:
@@ -77,6 +105,24 @@ def test_cli_retries_option_smoke() -> None:
     assert main(["--retries", "0", "session", "--node", "ecu2", "0x03"]) == 0
 
 
+def test_isotp_timing_options_reach_network_config() -> None:
+    args = build_parser().parse_args(
+        [
+            "--stmin-ms",
+            "1",
+            "--block-size",
+            "4",
+            "read-did",
+            "0xF190",
+        ]
+    )
+
+    config = _network(args)
+
+    assert config.stmin_ms == 1
+    assert config.block_size == 4
+
+
 def test_cli_reports_unavailable_can_adapter(capsys) -> None:
     code = main(
         [
@@ -94,3 +140,41 @@ def test_cli_reports_unavailable_can_adapter(capsys) -> None:
     assert code == 1
     assert "error:" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_open_clients_reuses_one_physical_bus() -> None:
+    raw_bus = QueueBus()
+    factory_calls = []
+    args = build_parser().parse_args(
+        [
+            "--interface",
+            "slcan",
+            "--channel",
+            "COM_TEST",
+            "stress",
+        ]
+    )
+
+    def factory(config):
+        factory_calls.append(config)
+        return raw_bus
+
+    clients, load_bus, cleanup = _open_clients(args, bus_factory=factory)
+    try:
+        raw_bus.inject(
+            0x7E8,
+            bytes([0x02, 0x7E, 0x00, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC]),
+        )
+        raw_bus.inject(
+            0x7E9,
+            bytes([0x02, 0x7E, 0x00, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC]),
+        )
+
+        assert clients["ecu1"].tester_present() == bytes([0x00])
+        assert clients["ecu2"].tester_present() == bytes([0x00])
+        assert len(factory_calls) == 1
+        assert load_bus is not None
+    finally:
+        cleanup()
+
+    assert raw_bus.shutdown_count == 1

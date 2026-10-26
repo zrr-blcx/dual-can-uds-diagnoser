@@ -23,15 +23,25 @@ from diagnoser.emu.memory_bus import MemoryBus
 from diagnoser.emu.virtual_ecu import VirtualEcu
 from diagnoser.tools.bus_off import render_bus_off_report, run_bus_off_test
 from diagnoser.tools.console import exchange_to_dict, format_exchange
+from diagnoser.tools.dbc_verify import render_dbc_verify, run_dbc_verify
+from diagnoser.tools.dual_node_smoke import (
+    render_dual_node_smoke,
+    run_dual_node_smoke,
+)
 from diagnoser.tools.fault_injection import FaultInjector
 from diagnoser.tools.report import render_markdown
 from diagnoser.tools.scheduler import DualNodeScheduler, SchedulerNode
+from diagnoser.tools.session_conflict import (
+    render_session_conflict,
+    run_session_conflict,
+)
 from diagnoser.tools.stress import run_stress
 from diagnoser.tools.trace import DEFAULT_TRACE_ID, render_trace, run_trace
 from diagnoser.tools.uds_smoke import render_uds_smoke, run_uds_smoke
 from diagnoser.tools.uds_week5 import render_uds_week5, run_uds_week5
 from diagnoser.transport import create_bus
 from diagnoser.transport.isotp import IsoTpTransport
+from diagnoser.transport.shared import SharedCanBus
 from diagnoser.uds.client import UdsClient
 from diagnoser.uds.dids import DID_DTC_STATUS, DID_ECU_NAME
 from diagnoser.uds.errors import NegativeResponse, UdsError
@@ -57,6 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--p2-star", dest="p2_star", type=float, help="P2*server timeout in ms (default 5000)"
     )
     parser.add_argument("--retries", type=int, help="response timeout retries (default 1)")
+    parser.add_argument("--stmin-ms", type=int, help="ISO-TP STmin advertised in FC")
+    parser.add_argument("--block-size", type=int, help="ISO-TP block size advertised in FC")
     parser.add_argument(
         "--json",
         action="store_true",
@@ -110,7 +122,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("demo", help="run the software virtual dual-node demo")
 
     p_stress = sub.add_parser("stress", help="run dual-node diagnostic stress test")
-    p_stress.add_argument("--frames", type=int, default=1000, help="total diagnostic requests")
+    p_stress.add_argument(
+        "--requests-per-node",
+        "--frames-per-node",
+        "--frames",
+        dest="requests_per_node",
+        type=int,
+        default=1000,
+        help="diagnostic requests per node (default 1000)",
+    )
+    p_stress.add_argument(
+        "--interval-ms",
+        type=float,
+        default=100.0,
+        help="request start interval in milliseconds (default 100)",
+    )
     p_stress.add_argument("--load", type=float, default=0.9, help="target bus load, e.g. 0.9")
     p_stress.add_argument("--did", type=lambda s: int(s, 0), default=0xF190)
     p_stress.add_argument("--report", help="optional markdown report output path")
@@ -152,6 +178,53 @@ def build_parser() -> argparse.ArgumentParser:
     p_uds_week5.add_argument("--node", default="ecu1")
     p_uds_week5.add_argument("--report", help="optional markdown report output path")
 
+    p_dual_smoke = sub.add_parser(
+        "dual-node-smoke",
+        help="concurrently exercise both configured ECUs over one shared CAN bus",
+    )
+    p_dual_smoke.add_argument(
+        "--requests-per-node",
+        type=int,
+        default=20,
+        help="number of read-only DID requests per ECU",
+    )
+    p_dual_smoke.add_argument(
+        "--did",
+        type=lambda s: int(s, 0),
+        default=0xF19A,
+        help="DID to read, default 0xF19A ECU name",
+    )
+    p_dual_smoke.add_argument("--report", help="optional markdown report output path")
+
+    p_session_conflict = sub.add_parser(
+        "session-conflict",
+        help="verify programming-session exclusion across two configured ECUs",
+    )
+    p_session_conflict.add_argument(
+        "--hold-seconds",
+        type=float,
+        default=0.4,
+        help="time the first ECU holds programming session",
+    )
+    p_session_conflict.add_argument(
+        "--wait-timeout",
+        type=float,
+        default=0.1,
+        help="time the second ECU waits before the job is skipped",
+    )
+    p_session_conflict.add_argument(
+        "--report",
+        help="optional markdown report output path",
+    )
+
+    p_dbc_verify = sub.add_parser(
+        "dbc-verify",
+        help="capture and decode the EngineData and VehicleStatus DBC bench frames",
+    )
+    p_dbc_verify.add_argument("--seconds", type=float, default=3.0)
+    p_dbc_verify.add_argument("--min-frames", type=int, default=3)
+    p_dbc_verify.add_argument("--report", help="optional markdown report output path")
+
     p_trace = sub.add_parser(
         "trace",
         help="trace raw CAN frames and report per-ID inter-frame gaps",
@@ -188,6 +261,10 @@ def _network(args: argparse.Namespace) -> NetworkConfig:
         config.p2_star_ms = args.p2_star
     if args.retries is not None:
         config.retries = args.retries
+    if args.stmin_ms is not None:
+        config.stmin_ms = args.stmin_ms
+    if args.block_size is not None:
+        config.block_size = args.block_size
     return config
 
 
@@ -226,6 +303,8 @@ def _open_client(
             rxid=ecu.response_id,
             timeout=config.timeout,
             padding=config.padding,
+            stmin_ms=config.stmin_ms,
+            block_size=config.block_size,
         )
         client = _make_client(config, transport)
 
@@ -243,8 +322,56 @@ def _open_client(
         rxid=ecu.response_id,
         timeout=config.timeout,
         padding=config.padding,
+        stmin_ms=config.stmin_ms,
+        block_size=config.block_size,
     )
     return _make_client(config, transport), bus.shutdown
+
+
+def _open_clients(
+    args: argparse.Namespace,
+    *,
+    bus_factory: Callable[[NetworkConfig], object] | None = None,
+) -> tuple[
+    dict[str, UdsClient],
+    object,
+    Callable[[], None],
+]:
+    """Open all configured ECUs through one shared physical CAN device."""
+
+    config = _network(args)
+    clients: dict[str, UdsClient] = {}
+    cleanups: list[Callable[[], None]] = []
+
+    if config.interface == "memory":
+        for ecu in config.ecus:
+            client, cleanup = _open_client(args, ecu.name)
+            clients[ecu.name] = client
+            cleanups.append(cleanup)
+        load_bus = MemoryBus(config.channel, bitrate=config.baudrate)
+        cleanups.append(load_bus.shutdown)
+    else:
+        factory = create_bus if bus_factory is None else bus_factory
+        shared = SharedCanBus(factory(config))
+        for ecu in config.ecus:
+            transport = IsoTpTransport(
+                shared.endpoint(ecu.response_id),
+                txid=ecu.request_id,
+                rxid=ecu.response_id,
+                timeout=config.timeout,
+                padding=config.padding,
+                stmin_ms=config.stmin_ms,
+                block_size=config.block_size,
+            )
+            clients[ecu.name] = _make_client(config, transport)
+        load_bus = shared
+        cleanups.append(shared.shutdown)
+
+    def cleanup() -> None:
+        for close in reversed(cleanups):
+            close()
+
+    return clients, load_bus, cleanup
 
 
 def _emit(args: argparse.Namespace, title: str, client: UdsClient) -> None:
@@ -373,11 +500,9 @@ def cmd_demo(args: argparse.Namespace) -> int:
     scheduler = DualNodeScheduler(
         [SchedulerNode(name=ecu.name) for ecu in config.ecus]
     )
-    clients: dict[str, tuple[UdsClient, Callable[[], None]]] = {}
+    clients, _, cleanup = _open_clients(args)
     try:
-        for ecu in config.ecus:
-            clients[ecu.name] = _open_client(args, ecu.name)
-        for node, (client, _) in clients.items():
+        for node, client in clients.items():
             scheduler.enter_session(node, 0x03)
             scheduler.run(node, lambda: client.change_session(0x03))
             _emit(args, f"{node} session", client)
@@ -396,28 +521,25 @@ def cmd_demo(args: argparse.Namespace) -> int:
             scheduler.run(node, lambda: client.routine_control(0x01, 0x0203))
             _emit(args, f"{node} self test", client)
         try:
-            clients["ecu1"][0].read_data_by_identifier(0xFFFF)
+            clients["ecu1"].read_data_by_identifier(0xFFFF)
         except NegativeResponse as exc:
             print(f"negative response check: {exc}")
         print("virtual dual-node demo passed")
         return 0
     finally:
-        for _, cleanup in clients.values():
-            cleanup()
+        cleanup()
 
 
 def cmd_stress(args: argparse.Namespace) -> int:
     config = _network(args)
-    load_bus = MemoryBus(config.channel, bitrate=config.baudrate)
-    clients: dict[str, tuple[UdsClient, Callable[[], None]]] = {}
+    clients, load_bus, cleanup = _open_clients(args)
     try:
-        for ecu in config.ecus:
-            clients[ecu.name] = _open_client(args, ecu.name)
         result = run_stress(
             load_bus,
-            {name: client for name, (client, _) in clients.items()},
+            clients,
             did=args.did,
-            requests=args.frames,
+            requests_per_node=args.requests_per_node,
+            request_interval_ms=args.interval_ms,
             target_load=args.load,
             baudrate=config.baudrate,
         )
@@ -428,9 +550,7 @@ def cmd_stress(args: argparse.Namespace) -> int:
             print(f"report written to {args.report}")
         return 0
     finally:
-        for _, cleanup in clients.values():
-            cleanup()
-        load_bus.shutdown()
+        cleanup()
 
 
 def cmd_fault(args: argparse.Namespace) -> int:
@@ -547,6 +667,67 @@ def cmd_uds_week5(args: argparse.Namespace) -> int:
         cleanup()
 
 
+def cmd_dual_node_smoke(args: argparse.Namespace) -> int:
+    clients, _, cleanup = _open_clients(args)
+    try:
+        result = run_dual_node_smoke(
+            clients,
+            requests_per_node=args.requests_per_node,
+            did=args.did,
+        )
+        report = render_dual_node_smoke(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
+def cmd_session_conflict(args: argparse.Namespace) -> int:
+    clients, _, cleanup = _open_clients(args)
+    try:
+        result = run_session_conflict(
+            clients,
+            hold_seconds=args.hold_seconds,
+            wait_timeout_seconds=args.wait_timeout,
+        )
+        report = render_session_conflict(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
+def cmd_dbc_verify(args: argparse.Namespace) -> int:
+    config = _network(args)
+    bus = create_bus(config)
+    try:
+        result = run_dbc_verify(
+            bus,
+            duration_seconds=args.seconds,
+            minimum_frames=args.min_frames,
+        )
+        report = render_dbc_verify(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        bus.shutdown()
+
+
 def cmd_trace(args: argparse.Namespace) -> int:
     config = _network(args)
     if config.interface == "memory":
@@ -601,6 +782,9 @@ def main(argv: list[str] | None = None) -> int:
         "uds-smoke": cmd_uds_smoke,
         "security": cmd_security,
         "uds-week5": cmd_uds_week5,
+        "dual-node-smoke": cmd_dual_node_smoke,
+        "session-conflict": cmd_session_conflict,
+        "dbc-verify": cmd_dbc_verify,
         "trace": cmd_trace,
     }
     handler = handlers.get(args.command)

@@ -7,10 +7,10 @@
 
 | Item | Value |
 | --- | --- |
-| Date | 2026-10-24 |
+| Date | 2026-10-26 |
 | Tester | Local bench run |
-| Firmware version | Week 3 final formal build, ISO-TP and CAN RX queue |
-| Diagnostic tool version | 0.6.0 Alpha |
+| Firmware version | Week 7/8 formal build plus isolated DBC and stress test modes |
+| Diagnostic tool version | 0.6.0 development tree |
 | CAN bitrate | 500 kbps |
 | Transceivers | SN65HVD230 x2 |
 | USB-CAN | CANable slcan |
@@ -26,15 +26,24 @@
 
 | Node | Requests | Success | Timeout | Error | Loss rate | Avg RTT | Max RTT |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ecu1 | - | - | - | - | - | - | - |
-| ecu2 | - | - | - | - | - | - | - |
+| ecu1 (F407) | 1000 | 1000 | 0 | 0 | 0.0000% | 64.37 ms | 91.08 ms |
+| ecu2 (F103) | 1000 | 1000 | 0 | 0 | 0.0000% | 66.67 ms | 86.59 ms |
+
+Low-load baseline conditions: 10% background load, 100 ms request interval,
+`retries=0`, F407/F103 each 1000 requests. The background sequence probe
+observed 45,036 frames at each node with zero gaps or out-of-order frames.
 
 ## 90%+ Load Stress Test
 
 | Node | Requests | Success | Timeout | Error | Loss rate | Avg RTT | Max RTT |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ecu1 | - | - | - | - | - | - | - |
-| ecu2 | - | - | - | - | - | - | - |
+| ecu1 (F407 DUT) | 1000 | 517 | 483 | 0 | 3.812% | 1.756 ms | 2.843 ms |
+| ecu2 (F103 DUT) | 1000 | 524 | 476 | 0 | 3.476% | 1.969 ms | 2.713 ms |
+
+Stress conditions: board-internal generator at a 228 us background period,
+1000 requests per DUT, 20 ms start interval. Both directions measured
+94.4% effective bus load. Loss is the physical background frame gap rate;
+UDS timeout rates are 48.3% for F407 and 47.6% for F103.
 
 ## 10,000 Frame Final Test
 
@@ -102,8 +111,20 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-24 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
 | 2026-10-25 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider` | `102 passed` |
 | 2026-10-25 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `107 passed` |
+| 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `110 passed` |
+| 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `112 passed` |
+| 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `114 passed` |
+| 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `125 passed` |
 | 2026-10-24 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40086628980` |
 | 2026-10-25 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40167418774` |
+
+The final 2026-10-26 `125 passed` run includes shared physical-bus routing,
+dual-node smoke and session arbitration, DBC capture, per-node stress metrics,
+background sequence probes, and portable fault/stress test helpers. It used
+the existing Python 3.12 `.venv`; the local
+Python 3.14 environment did not have the declared `PyYAML` development
+dependency, so targeted Python 3.14 tests were run there but no full Python 3.14
+result is claimed for this change.
 
 The 2026-10-24 local regression used the `py -3.14` launcher with the cache
 provider disabled. GitHub Actions independently passed the complete suite on
@@ -136,6 +157,8 @@ output, and `udsoncan` interoperability.
 | 2026-10-04 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, text 11304 B |
 | 2026-10-22 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, final r22 text 15828 B, bss 3452 B |
 | 2026-10-22 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, final r22 text 14304 B, bss 3452 B |
+| 2026-10-26 | STM32F407ZGT6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f407/Build/ecu-f407.elf` | PASS, formal text 34160 B, data 44 B, bss 9164 B |
+| 2026-10-26 | STM32F103C8T6 | GNU ARM GCC 14.3.1 | `firmware/ecu-f103/Build/ecu-f103.elf` | PASS, formal text 32072 B, data 20 B, bss 9192 B |
 
 The F103 image was programmed, verified, and reset through ST-Link. The F407
 image was also programmed successfully after reconnecting its SWD target.
@@ -302,6 +325,80 @@ changed in Week 6, so the 2026-10-04 firmware build sizes still apply.
 At the time of Week 6 Alpha testing, real CANable capture and hardware timing
 were Target until the ISO-TP firmware path was available. The later dual-node
 hardware section below records physical addressing and timing results.
+
+## Week 7 DBC Hardware Validation
+
+Measured on 2026-10-26 using isolated `-DbcBench` images. F407 sent
+`EngineData` on `0x180`; F103 sent `VehicleStatus` on `0x280`. A CANable
+captured the live bus for 3 seconds and cantools decoded every frame.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| `0x180` frame count | At least 10 in 3 seconds | PASS, 27 frames |
+| `0x180` decoded values | 1234.5 rpm, 85 degC | PASS |
+| `0x280` frame count | At least 10 in 3 seconds | PASS, 27 frames |
+| `0x280` decoded values | 42.5 km/h, brake active | PASS |
+| F407 Sector 11 | Hash unchanged through test image and restore | PASS, `F91D4632...EBFD2F` |
+| Formal firmware restore | Both nodes pass dual-node smoke | PASS, 20/20 each |
+
+The formal firmware does not include the DBC bench sender or stress/fault test
+hooks.
+
+## Week 7 Shared-Bus Scheduler Smoke
+
+Measured on 2026-10-26 through one CANable slcan device at 500 kbps. The CLI
+opened the physical adapter once, ran two node workers through
+`QueuedDualNodeScheduler`, and issued read-only DID requests concurrently.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| F407 requests | 20/20 successful reads | PASS, response ID `0x7E8` |
+| F103 requests | 20/20 successful reads | PASS, response ID `0x7E9` |
+| Session restore | Both nodes return to Default | PASS |
+| Shared device | One physical CAN adapter for both clients | PASS |
+| Cross-node response | No `0x7E8/0x7E9` crossover | PASS |
+
+This validates the shared physical bus and concurrent scheduler request path.
+DBC and Week 8 evidence are recorded in the sections below.
+
+## Week 7 Programming-Session Conflict
+
+Measured on 2026-10-26 on the real F407/F103 bus. F407 held Programming session
+`0x02` for 0.5 seconds while F103 submitted an exclusive scheduler job with a
+0.1 second conflict wait.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| F407 enters `0x02` | Session active before F103 submits | PASS |
+| F103 conflicting job | Skipped after wait timeout | PASS |
+| Skipped job execution | Job function never runs | PASS |
+| F407 restore | Returns to Default and remains responsive | PASS |
+| F103 recovery | Read succeeds after lock release | PASS |
+
+## Week 8 Stress and Fault Injection
+
+The final 90% stress run used board-internal test images so one MCU generated
+low-priority `0x7F0` background frames while issuing single-frame UDS requests
+to the other MCU. This avoids the slcan tester becoming the bottleneck and
+allows the receiving MCU to count sequence gaps independently.
+
+| DUT | Load | Requests | Success | Timeout | Physical gap loss | Avg RTT | Max RTT |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| F103 | 94.40% | 1000 | 524 | 476 | 3.476% | 1.969 ms | 2.713 ms |
+| F407 | 94.41% | 1000 | 517 | 483 | 3.812% | 1.756 ms | 2.843 ms |
+
+Real hardware fault-hook checks on both nodes:
+
+| Injection | F407 | F103 |
+| --- | --- | --- |
+| DTC status | PASS, `01 02 03 2A` read back | PASS, `04 05 06 2B` read back |
+| NRC `0x31` on service `0x22` | PASS | PASS |
+| Simulated communication loss | PASS, offline then recovery | PASS, offline then recovery |
+| Bus-Off relay | Covered by Week 2 physical 3/3 recovery evidence | Same bus experiment |
+| Formal restore | PASS, 20/20 dual-node smoke | PASS, 20/20 dual-node smoke |
+
+The 90% scenario intentionally exposes degradation. Its DUT timeout and gap
+rates are not compared with the normal-load `<0.1%` physical frame loss gate.
 
 ## Week 2 Bus-Off Hardware Validation
 
@@ -486,7 +583,12 @@ multi-frame `22 F190`.
 
 ## Conclusion
 
-- Physical frame loss below 0.1% at normal load: Target.
+- Week 8 low-load physical frame loss: PASS, zero gaps across 45,036
+  background frames at each node.
+- Week 8 90%+ stress: PASS as an acceptance exercise, 94.40-94.41% effective
+  load with degradation and physical gaps recorded separately.
+- Week 7 DBC hardware signals, shared-bus scheduling, and session exclusion:
+  PASS.
 - Week 3 ISO-TP bidirectional 100-byte transfer: PASS.
 - Week 4 UDS sessions, DID reads, S3 timeout, NRC, dual-node routing and
   udsoncan CANable interoperability: PASS.
@@ -495,5 +597,7 @@ multi-frame `22 F190`.
   `0x72` injection also PASS.
 - Week 6 diagnostic CLI against both real ECUs: session, read, write, routine,
   raw, pending wait and the complete `uds-week5` flow PASS.
+- Week 8 DTC, NRC, and communication-loss injection: PASS on F407 and F103;
+  Bus-Off uses the earlier physical relay evidence.
 - Bus-Off physical detection, automatic recovery, and sustained-fault software
   reset escalation: PASS.
