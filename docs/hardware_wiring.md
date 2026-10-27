@@ -110,3 +110,37 @@ before connecting an external module.
 - Diagnostic IDs are `0x7E0/0x7E8` for F407 and `0x7E1/0x7E9` for F103.
 - Diagram: `docs/项目二-第3周-ISOTP双节点诊断接线.svg`
   (source: `docs/项目二-第3周-ISOTP双节点诊断接线.dot`).
+
+## Week 9-10 Stability and Frame-Loss Topology
+
+The physical bench is unchanged:
+
+- F407 and F103 each use one external SN65HVD230.
+- The two transceiver modules provide the two 120 ohm end terminations, so
+  CANH-CANL measures approximately 60 ohm with power off.
+- CANable taps the middle of the bus with its 120 ohm switch off.
+- The fault relay remains installed but de-energized: CH1 closed, CH2 open.
+- All boards, transceivers, CANable, ST-Link probes, and relay control share a
+  common ground.
+
+Week 9 stability uses isolated firmware modes:
+
+- F407 runs `-LoadGenerator -LoadPeriodUs 250 -PeerStability`.
+- F103 runs `-PeerStability`.
+- F407 emits low-priority `0x7F0` background traffic; both MCUs read the peer's
+  `0xF19A` every 100 ms and continue serving UDS.
+- CAN RX hardware routes background traffic to FIFO1. Control and diagnostic
+  traffic use FIFO0 and are drained first.
+- The CANable is not used as the 90% load source. It is optional for capture and
+  must not be treated as the stability tester.
+
+Week 10 frame-loss modes keep the same wiring:
+
+- F407 sends sequenced frames on `0x6F0`.
+- F103 sends sequenced frames on `0x6F1`.
+- Each node counts the peer sequence and continues the `0xF19A` UDS exchange.
+- The 50% aggregate-load run uses an `888 us` period and 5000 frames per node.
+- The 90% supplemental run uses a `250 us` period and 1000 frames per node.
+
+Formal firmware is rebuilt and reflashed after every isolated test mode. Raw
+ST-Link reads, probe serial numbers, and local COM ports remain local.

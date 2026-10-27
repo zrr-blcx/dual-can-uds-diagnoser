@@ -24,7 +24,7 @@ def load_pyproject() -> dict:
 def test_package_metadata_is_complete_and_versioned() -> None:
     project = load_pyproject()["project"]
 
-    assert project["version"] == diagnoser.__version__ == "0.6.0"
+    assert project["version"] == diagnoser.__version__ == "1.0.0"
     assert project["readme"] == "README.md"
     assert project["license"] == "MIT"
     assert project["authors"]

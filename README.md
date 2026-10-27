@@ -1,5 +1,7 @@
 # dual-can-uds-diagnoser
 
+[English](README.en.md) | 中文
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)]()
 [![CI](https://github.com/zrr-blcx/dual-can-uds-diagnoser/actions/workflows/ci.yml/badge.svg)](https://github.com/zrr-blcx/dual-can-uds-diagnoser/actions/workflows/ci.yml)
@@ -12,7 +14,7 @@
 
 ## Status
 
-- Project progress: Weeks 1-8 are complete; Weeks 9-10 remain on the roadmap.
+- Project progress: Weeks 1-10 are complete; release `v1.0.0`.
 - Week 1: F407/F103 CAN1 at 500 kbps, dual-node frame exchange and hardware
   baseline complete.
 - Week 2 CAN health and Bus-Off recovery: SCE error handling, IWDG,
@@ -25,7 +27,7 @@
   dual-node routing and `udsoncan` CANable interoperability complete.
 - Week 5: `0x27/0x2E/0x31`, F407/F103 Flash persistence, hardware self-test,
   parameter clear, pending responses and the dual-node NRC matrix complete.
-- Week 6: diagnostic tool V1.0 Alpha with P2/P2* timing, `0x78` handling,
+- Week 6: diagnostic tool V1.0 with P2/P2* timing, `0x78` handling,
   retries, timestamped/JSON output and full F407/F103 CANable validation.
 - Week 7 shared-bus scheduler smoke: 20 read-only requests per node through
   one CANable, with independent `0x7E8/0x7E9` responses and session restore.
@@ -37,7 +39,10 @@
 - Week 8 stress/fault injection: 94.4% load in both directions with degradation
   recorded separately; DTC, NRC, communication loss and Bus-Off coverage.
 - CI: Python 3.10-3.14 plus F407/F103 ARM firmware builds.
-- Week 9-10 acceptance metrics remain marked `Target` in the roadmap.
+- Week 9: four-hour dual-node peer stability completed with no surprise reset;
+  F407 also completed three independent Bus-Off recovery rounds.
+- Week 10: 10,000-frame final test passed with 0.04% / 0% physical loss, plus a
+  2000-frame 90% supplemental run.
 
 ## 核心能力
 
@@ -49,7 +54,7 @@
 - DBC 文件生成与 C/Python 信号结构体自动生成
 - 总线负载模拟、压力测试、故障注入与报告工具
 - 双节点请求调度与编程会话互斥
-- 诊断仪 Alpha：P2/P2* 时序、`0x78` 响应挂起等待、超时重试、时间戳与
+- 诊断仪：P2/P2* 时序、`0x78` 响应挂起等待、超时重试、时间戳与
   JSON Lines 输出、udsoncan 互操作适配
 - 原始 CAN 帧抓取与同 ID 帧间隔统计（`trace`），用于测量 Bus-Off 离线窗口
 
@@ -88,6 +93,7 @@ py -3.14 -m diagnoser.cli security --node ecu1
 py -3.14 -m diagnoser.cli write-did --node ecu1 --session 0x03 --unlock 0xF191 01020304
 py -3.14 -m diagnoser.cli routine --node ecu1 --session 0x03 --unlock 0x0203
 py -3.14 -m diagnoser.cli stress --requests-per-node 1000 --interval-ms 100 --load 0.1
+py -3.14 -m diagnoser.cli stability --hours 4 --interval-ms 100 --sample-seconds 60 --load 0.9
 py -3.14 -m diagnoser.cli bus-off-test --cycles 3 --seconds 0.2
 py -3.14 -m diagnoser.cli uds-smoke --node ecu1
 py -3.14 -m diagnoser.cli uds-week5 --node ecu1
@@ -116,7 +122,7 @@ py -3.14 -m diagnoser.cli --config configs/canable.example.json --channel COMx t
 py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --seconds 10 --id 0x123 --report outputs/trace.md
 ```
 
-诊断仪 Alpha 说明、命令列表与输出格式见
+诊断仪说明、命令列表与输出格式见
 [docs/diagnoser_v1_alpha.md](docs/diagnoser_v1_alpha.md)。
 
 第 5 周安全访问、持久化、自检与参数清除见
@@ -124,6 +130,15 @@ py -3.14 -m diagnoser.cli --config configs/canable.gsusb.example.json trace --se
 
 第 8 周基线、90%+ 板内压力测试和故障注入结果见
 [docs/week8_stress_fault.md](docs/week8_stress_fault.md)。
+
+第 9 周稳定性执行器、4 小时命令和证据要求见
+[docs/week9_stability.md](docs/week9_stability.md)。
+
+第 10 周 10,000 帧终测、90% 补充测试和证据清单见
+[docs/week10_final_test.md](docs/week10_final_test.md)。
+
+发布门禁与 Tag/Release 检查见
+[docs/release_checklist.md](docs/release_checklist.md)。
 
 全量测试结果与实机证据见
 [docs/test_report.md](docs/test_report.md)。

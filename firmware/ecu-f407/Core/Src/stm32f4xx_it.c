@@ -69,6 +69,11 @@ void CAN1_RX0_IRQHandler(void)
   HAL_CAN_IRQHandler(&hcan1);
 }
 
+void CAN1_RX1_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan1);
+}
+
 /**
   * @brief This function handles CAN1 status change error interrupt.
   *        Error interrupts are enabled in CanDriver_Start(); HAL_CAN_IRQHandler

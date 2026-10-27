@@ -95,6 +95,21 @@ F407/F103 node-to-node ISO-TP, UDS, persistence and NRC acceptance are complete.
 - Fault injector covers DTC, communication loss, NRC injection, and Bus-Off.
 - Stress metrics distinguish physical CAN frame loss from UDS request timeouts.
 
+## Stability and Final Frame Loss
+
+- `stability` runs duration-based dual-node UDS traffic with periodic samples
+  and interrupt-safe partial results.
+- Board test images can generate the 90% load source internally, so a single
+  SLCAN adapter does not have to transmit and receive the full stress stream.
+- `PeerStability` makes both MCUs diagnostic testers and servers at the same
+  time. Each node reads the peer's `0xF19A` every 100 ms.
+- `FrameLossBench` sends distinct sequenced IDs (`0x6F0` / `0x6F1`) with a
+  fixed target so both directions can be counted independently.
+- CAN RX uses hardware FIFO separation and software priority queues. Background
+  frames are drained after control and diagnostic traffic.
+- The load source keeps all transmit mailboxes available for UDS and peer
+  requests; background frames are skipped rather than stealing the last slot.
+
 ## CAN Health and Bus-Off Recovery
 
 - `CanHealthMonitor` models TEC/REC, error-active/error-passive/Bus-Off state,

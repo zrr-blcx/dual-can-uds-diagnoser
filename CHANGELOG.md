@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0 - 2026-10-27
+
+- Add a duration-based dual-node UDS stability runner with periodic sampling,
+  interrupt-safe partial results, and explicit separation between software
+  completion and hardware reset/watchdog evidence.
+- Add a board-internal load generator, bidirectional peer diagnostics, hardware
+  and software RX priority for diagnostic traffic, and fixed-count physical
+  frame-loss test modes.
+- Complete a 4.046-hour dual-node stability run at about 90% bus load with no
+  surprise reset. F407 completed 145596/145673 peer diagnostics and F103
+  completed 145650/145650.
+- Validate three independent Bus-Off injections with three successful F407
+  recoveries, final error-active state, and no reset. Restore both formal
+  images with 20/20 read-only requests per node.
+- Pass the 10,000-frame normal-load test with 0.04% F407-to-F103 physical loss
+  and 0% F103-to-F407 loss.
+- Record a separate 2000-frame 90% supplemental run with UDS timeout rates
+  distinct from physical frame loss.
+- Publish bilingual README, final architecture, wiring, stability, and release
+  documentation.
+
 ## 0.6.0 - 2026-10-25
 
 - Standardize repository metadata, privacy boundaries, community files, raw

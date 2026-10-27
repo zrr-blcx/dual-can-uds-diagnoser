@@ -28,6 +28,8 @@
 #include "dbc_bench.h"
 #include "isotp.h"
 #include "isotp_bench.h"
+#include "load_generator.h"
+#include "peer_tester.h"
 #include "stress_master.h"
 #include "uds_ecu.h"
 #include "uds_fault_test.h"
@@ -85,6 +87,36 @@
 #endif
 #ifndef APP_STRESS_MASTER
 #define APP_STRESS_MASTER 0U
+#endif
+#ifndef APP_LOAD_GENERATOR
+#define APP_LOAD_GENERATOR 0U
+#endif
+#ifndef APP_LOAD_PERIOD_US
+#define APP_LOAD_PERIOD_US 228U
+#endif
+#ifndef APP_LOAD_TARGET_FRAMES
+#define APP_LOAD_TARGET_FRAMES 0U
+#endif
+#ifndef APP_LOAD_FRAME_ID
+#define APP_LOAD_FRAME_ID 0x7F0U
+#endif
+#ifndef APP_PEER_LOAD_FRAME_ID
+#define APP_PEER_LOAD_FRAME_ID 0x7F0U
+#endif
+#ifndef APP_FRAME_LOSS_BENCH
+#define APP_FRAME_LOSS_BENCH 0U
+#endif
+#ifndef APP_FRAME_LOSS_COORDINATOR
+#define APP_FRAME_LOSS_COORDINATOR 0U
+#endif
+#ifndef APP_PEER_STABILITY
+#define APP_PEER_STABILITY 0U
+#endif
+#if APP_PEER_STABILITY
+#define APP_PEER_REQUEST_ID      0x7E1U
+#define APP_PEER_RESPONSE_ID     0x7E9U
+#define APP_PEER_INTERVAL_MS     100U
+#define APP_PEER_RESPONSE_MS     50U
 #endif
 #if APP_STRESS_MASTER
 #define APP_STRESS_REQUEST_ID    0x7E1U
@@ -173,13 +205,27 @@ static uint8_t g_isotp_tx_buffer[APP_ISOTP_TX_BUFFER_SIZE];
 static uint8_t g_isotp_rx_buffer[APP_ISOTP_RX_BUFFER_SIZE];
 static IsotpRx_t g_isotp_rx;
 static IsotpTx_t g_isotp_tx;
-#if APP_BENCH_TEST
+#if APP_BENCH_TEST || APP_PEER_STABILITY
 BackgroundProbe_t g_background_probe;
+#endif
+#if APP_BENCH_TEST
 UdsFaultTest_t g_uds_fault_test;
 #endif
 #if APP_STRESS_MASTER
 StressMasterStats_t g_stress_master;
 volatile uint8_t g_stress_response_seen;
+#endif
+#if APP_LOAD_GENERATOR
+LoadGeneratorStats_t g_load_generator;
+#endif
+#if APP_PEER_STABILITY
+PeerTesterStats_t g_peer_tester;
+volatile uint32_t g_peer_request_started_ms;
+volatile uint8_t g_peer_request_pending;
+#endif
+#if APP_FRAME_LOSS_BENCH
+volatile uint8_t g_frame_loss_peer_ready;
+volatile uint8_t g_frame_loss_go_seen;
 #endif
 #if APP_DBC_BENCH
 static DbcBench_t g_dbc_bench;
@@ -261,6 +307,15 @@ static bool APP_UdsEraseParams(void *context);
 #if APP_STRESS_MASTER
 static void APP_RunStressMaster(void);
 #endif
+#if APP_LOAD_GENERATOR
+static void APP_ServiceLoadGenerator(void);
+#endif
+#if APP_PEER_STABILITY
+static void APP_ServicePeerTester(uint32_t now);
+#endif
+#if APP_FRAME_LOSS_BENCH
+static void APP_ServiceFrameLossHandshake(uint32_t now);
+#endif
 
 /* USER CODE END PFP */
 
@@ -331,9 +386,21 @@ int main(void)
 #if APP_DBC_BENCH
   DbcBench_Init(&g_dbc_bench, DBC_BENCH_F407, 100U);
 #endif
-#if APP_BENCH_TEST
+#if APP_BENCH_TEST || APP_PEER_STABILITY
   BackgroundProbe_Init(&g_background_probe);
+#endif
+#if APP_BENCH_TEST
   UdsFaultTest_Init(&g_uds_fault_test);
+#endif
+#if APP_LOAD_GENERATOR
+  LoadGenerator_Init(&g_load_generator,
+                     APP_LOAD_PERIOD_US,
+                     APP_LOAD_TARGET_FRAMES);
+#endif
+#if APP_PEER_STABILITY
+  PeerTester_Init(&g_peer_tester,
+                  APP_PEER_INTERVAL_MS,
+                  APP_PEER_RESPONSE_MS);
 #endif
 
   /* ISO-TP transport endpoints bound to the CAN driver. */
@@ -386,6 +453,12 @@ int main(void)
     CanDriver_ProcessRx(&g_can);
     UdsEcu_Tick(&g_uds, now);
     APP_ServiceIsotp(now);
+#if APP_PEER_STABILITY
+    APP_ServicePeerTester(now);
+#endif
+#if APP_FRAME_LOSS_BENCH
+    APP_ServiceFrameLossHandshake(now);
+#endif
 
     if ((now - last_tx_tick) >= APP_CAN_TX_PERIOD_MS)
     {
@@ -408,6 +481,9 @@ int main(void)
 
     APP_ServiceCanHealth(now);
     APP_UpdateHealthSummary();
+#if APP_LOAD_GENERATOR
+    APP_ServiceLoadGenerator();
+#endif
 
 #if APP_IWDG_SELFTEST
     /* self-test: intentionally stop feeding the watchdog */
@@ -424,7 +500,11 @@ int main(void)
     Watchdog_WwdgService(now);
 #endif
 
-#if APP_BENCH_TEST
+#if APP_LOAD_GENERATOR
+    /* Keep the scheduler hot enough to hold the requested background rate. */
+#elif APP_PEER_STABILITY
+    HAL_Delay(1U);
+#elif APP_BENCH_TEST
     HAL_Delay(1U);
 #else
     HAL_Delay(10U);
@@ -435,6 +515,52 @@ int main(void)
   }
   /* USER CODE END 3 */
 }
+
+#if APP_PEER_STABILITY
+static void APP_ServicePeerTester(uint32_t now)
+{
+  static uint32_t next_request;
+  static bool initialized;
+  uint8_t request[8];
+
+  if (!initialized)
+  {
+    next_request = now;
+    initialized = true;
+  }
+
+  if (g_peer_request_pending &&
+      ((uint32_t)(now - g_peer_request_started_ms) >= APP_PEER_RESPONSE_MS))
+  {
+    PeerTester_RecordTimeout(&g_peer_tester);
+    g_peer_request_pending = 0U;
+  }
+
+  if (g_peer_request_pending ||
+      ((int32_t)(now - next_request) < 0))
+  {
+    return;
+  }
+
+  PeerTester_BuildRequest(request);
+  g_peer_request_started_ms = now;
+  if (CanDriver_SendStd(&g_can, APP_PEER_REQUEST_ID, request, 8U) == HAL_OK)
+  {
+    PeerTester_RecordRequest(&g_peer_tester);
+    g_peer_request_pending = 1U;
+  }
+  else
+  {
+    PeerTester_RecordTxFailure(&g_peer_tester);
+  }
+
+  next_request += APP_PEER_INTERVAL_MS;
+  if ((int32_t)(now - next_request) >= 0)
+  {
+    next_request = now + APP_PEER_INTERVAL_MS;
+  }
+}
+#endif
 
 /**
   * @brief System Clock Configuration
@@ -550,8 +676,41 @@ static void APP_OnCanRx(uint32_t id, const uint8_t *data, uint32_t len)
   return;
 #endif
 
-#if APP_BENCH_TEST
-  if (id == 0x7F0U && len == 8U)
+#if APP_FRAME_LOSS_BENCH
+  if ((id == 0x6F2U) && (len == 8U))
+  {
+    if (data[0] == 0x10U)
+    {
+      g_frame_loss_peer_ready = 1U;
+    }
+    else if (data[0] == 0x20U)
+    {
+      g_frame_loss_go_seen = 1U;
+    }
+    return;
+  }
+#endif
+
+#if APP_PEER_STABILITY
+  if (id == APP_PEER_RESPONSE_ID && len == 8U)
+  {
+    if (g_peer_request_pending &&
+        PeerTester_AcceptResponse(&g_peer_tester,
+                                  id,
+                                  data,
+                                  len,
+                                  APP_PEER_RESPONSE_ID))
+    {
+      PeerTester_RecordLatency(&g_peer_tester,
+                               HAL_GetTick() - g_peer_request_started_ms);
+      g_peer_request_pending = 0U;
+    }
+    return;
+  }
+#endif
+
+#if APP_BENCH_TEST || APP_PEER_STABILITY
+  if (id == APP_PEER_LOAD_FRAME_ID && len == 8U)
   {
     uint32_t sequence = ((uint32_t)data[0] << 24U) |
                         ((uint32_t)data[1] << 16U) |
@@ -597,6 +756,101 @@ static bool APP_IsotpSend(void *ctx, uint32_t txid, const uint8_t data[8U])
   return CanDriver_SendStd(&g_can, txid, data, 8U) == HAL_OK;
 #endif
 }
+
+#if APP_LOAD_GENERATOR
+static void APP_ServiceLoadGenerator(void)
+{
+  static bool initialized;
+  static uint32_t next_send;
+  uint8_t frame[8];
+  const uint32_t cycles_per_us = SystemCoreClock / 1000000U;
+  const uint32_t period_cycles = APP_LOAD_PERIOD_US * cycles_per_us;
+  uint32_t now;
+  uint32_t late;
+
+  if ((g_load_generator.target_frames != 0U) &&
+      (g_load_generator.completed != 0U))
+  {
+    return;
+  }
+#if APP_FRAME_LOSS_BENCH
+  if (g_frame_loss_go_seen == 0U)
+  {
+    return;
+  }
+#endif
+
+  if (!initialized)
+  {
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0U;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    next_send = DWT->CYCCNT;
+    initialized = true;
+  }
+
+  now = DWT->CYCCNT;
+  if ((int32_t)(now - next_send) < 0)
+  {
+    return;
+  }
+
+  late = now - next_send;
+  if (late >= period_cycles)
+  {
+    uint32_t skipped = late / period_cycles;
+    LoadGenerator_RecordSkipped(&g_load_generator, skipped);
+    next_send += skipped * period_cycles;
+  }
+
+  if (CanDriver_GetTxMailboxesFreeLevel(&g_can) < 3U)
+  {
+    return;
+  }
+
+  LoadGenerator_BuildFrame(g_load_generator.sequence, frame);
+  LoadGenerator_RecordAttempt(
+      &g_load_generator,
+      CanDriver_SendStd(&g_can, APP_LOAD_FRAME_ID, frame, 8U) == HAL_OK);
+  next_send += period_cycles;
+}
+#endif
+
+#if APP_FRAME_LOSS_BENCH
+static void APP_ServiceFrameLossHandshake(uint32_t now)
+{
+  static uint32_t next_control;
+  static bool initialized;
+  uint8_t message[8] = {0};
+
+  if (!initialized)
+  {
+    next_control = now;
+    initialized = true;
+  }
+  if (g_frame_loss_go_seen || ((int32_t)(now - next_control) < 0))
+  {
+    return;
+  }
+
+#if APP_FRAME_LOSS_COORDINATOR
+  if (g_frame_loss_peer_ready == 0U)
+  {
+    message[0] = 0x10U;
+  }
+  else
+  {
+    message[0] = 0x20U;
+    g_frame_loss_go_seen = 1U;
+  }
+#else
+  message[0] = 0x10U;
+#endif
+
+  (void)CanDriver_SendStd(&g_can, 0x6F2U, message, 8U);
+  next_control = now + 100U;
+}
+#endif
 
 static bool APP_IsotpTxPending(void *ctx)
 {
@@ -794,6 +1048,14 @@ static void APP_ServiceIsotpBench(uint32_t now)
   * @retval None
   */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+  if ((hcan != NULL) && (hcan->Instance == CAN1))
+  {
+    CanDriver_RxIrqHandler(&g_can);
+  }
+}
+
+void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   if ((hcan != NULL) && (hcan->Instance == CAN1))
   {

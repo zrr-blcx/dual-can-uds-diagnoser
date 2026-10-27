@@ -90,6 +90,10 @@ powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -BenchTest
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -BenchTest
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -StressMaster
 powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -StressMaster
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -LoadGenerator -LoadPeriodUs 250 -PeerStability
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -PeerStability
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f407\build.ps1 -LoadGenerator -LoadPeriodUs 888 -PeerStability -FrameLossBench -FrameLossFrames 5000
+powershell -ExecutionPolicy Bypass -File firmware\ecu-f103\build.ps1 -LoadGenerator -LoadPeriodUs 888 -PeerStability -FrameLossBench -FrameLossFrames 5000
 ```
 
 These switches are mutually exclusive where they change bus behavior. Formal

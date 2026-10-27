@@ -9,7 +9,12 @@
     [switch]$WwdgEarlyFeedTest,
     [switch]$DbcBench,
     [switch]$BenchTest,
-    [switch]$StressMaster
+    [switch]$StressMaster,
+    [switch]$LoadGenerator,
+    [switch]$PeerStability,
+    [switch]$FrameLossBench,
+    [ValidateRange(1, 100000)][int]$FrameLossFrames = 5000,
+    [ValidateRange(100, 10000)][int]$LoadPeriodUs = 228
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,18 +111,44 @@ if ($DbcBench) {
     Write-Host 'DBC BENCH: F407 EngineData on 0x180'
 }
 if ($BenchTest) {
-    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx) {
-        throw 'BenchTest cannot be combined with DBC or ISO-TP bench modes.'
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $StressMaster -or $LoadGenerator -or $PeerStability) {
+        throw 'BenchTest must be built separately from other test modes.'
     }
     $commonFlags += '-DAPP_BENCH_TEST=1U'
     Write-Host 'BENCH TEST: background sequence probe and UDS fault hook'
 }
 if ($StressMaster) {
-    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $BenchTest) {
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $BenchTest -or $LoadGenerator -or $PeerStability) {
         throw 'StressMaster must be built as its own test mode.'
     }
     $commonFlags += '-DAPP_STRESS_MASTER=1U'
     Write-Host 'STRESS MASTER: 90% background load and F103 UDS test'
+}
+if ($LoadGenerator) {
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $BenchTest -or $StressMaster) {
+        throw 'LoadGenerator can only be combined with PeerStability.'
+    }
+    $commonFlags += '-DAPP_LOAD_GENERATOR=1U'
+    $commonFlags += "-DAPP_LOAD_PERIOD_US=$LoadPeriodUs"
+    Write-Host "LOAD GENERATOR: background frame every $LoadPeriodUs us"
+}
+if ($PeerStability) {
+    if ($DbcBench -or $IsotpBenchTx -or $IsotpBenchRx -or $BenchTest -or $StressMaster) {
+        throw 'PeerStability can only be combined with LoadGenerator.'
+    }
+    $commonFlags += '-DAPP_PEER_STABILITY=1U'
+    Write-Host 'PEER STABILITY: 0x22 F19A cross-check every 100 ms'
+}
+if ($FrameLossBench) {
+    if (-not $LoadGenerator -or -not $PeerStability) {
+        throw 'FrameLossBench requires LoadGenerator and PeerStability.'
+    }
+    $commonFlags += '-DAPP_FRAME_LOSS_BENCH=1U'
+    $commonFlags += '-DAPP_FRAME_LOSS_COORDINATOR=1U'
+    $commonFlags += "-DAPP_LOAD_TARGET_FRAMES=$FrameLossFrames"
+    $commonFlags += '-DAPP_LOAD_FRAME_ID=0x6F0U'
+    $commonFlags += '-DAPP_PEER_LOAD_FRAME_ID=0x6F1U'
+    Write-Host "FRAME LOSS BENCH: $FrameLossFrames frames, 0x6F0 -> peer"
 }
 
 $sources = @()
@@ -148,6 +179,13 @@ if ($BenchTest) {
 }
 if ($StressMaster) {
     $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'stress_master.c')
+}
+if ($LoadGenerator) {
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'load_generator.c')
+}
+if ($PeerStability) {
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'background_probe.c')
+    $sources += Get-Item -LiteralPath (Join-Path $commonRoot 'peer_tester.c')
 }
 $objectFiles = @()
 $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar

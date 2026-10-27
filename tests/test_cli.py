@@ -25,6 +25,29 @@ def test_cli_bus_off_test_smoke() -> None:
     )
 
 
+def test_cli_stability_smoke(capsys) -> None:
+    assert (
+        main(
+            [
+                "stability",
+                "--hours",
+                "0.0002",
+                "--interval-ms",
+                "10",
+                "--sample-seconds",
+                "0.1",
+                "--load",
+                "0",
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "# Dual-Node UDS Stability Report" in output
+    assert "Software completion: PASS" in output
+
+
 def test_cli_uds_week5_smoke() -> None:
     assert main(["uds-week5", "--node", "ecu1"]) == 0
 

@@ -1,4 +1,4 @@
-"""Command-line UDS diagnostic tool 0.6.0 Alpha."""
+"""Command-line UDS diagnostic tool 1.0.0."""
 
 from __future__ import annotations
 
@@ -35,6 +35,11 @@ from diagnoser.tools.session_conflict import (
     render_session_conflict,
     run_session_conflict,
 )
+from diagnoser.tools.stability import (
+    StabilitySample,
+    render_stability_report,
+    run_stability,
+)
 from diagnoser.tools.stress import run_stress
 from diagnoser.tools.trace import DEFAULT_TRACE_ID, render_trace, run_trace
 from diagnoser.tools.uds_smoke import render_uds_smoke, run_uds_smoke
@@ -54,7 +59,7 @@ DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "network.json"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="diagnoser",
-        description="Dual-node CAN + UDS diagnostic tool 0.6.0 Alpha",
+        description="Dual-node CAN + UDS diagnostic tool 1.0.0",
     )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="network JSON config")
     parser.add_argument("--interface", help="python-can interface (memory, slcan, ...)")
@@ -140,6 +145,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_stress.add_argument("--load", type=float, default=0.9, help="target bus load, e.g. 0.9")
     p_stress.add_argument("--did", type=lambda s: int(s, 0), default=0xF190)
     p_stress.add_argument("--report", help="optional markdown report output path")
+
+    p_stability = sub.add_parser(
+        "stability",
+        help="run duration-based dual-node UDS stability traffic",
+    )
+    p_stability.add_argument(
+        "--hours",
+        type=float,
+        default=4.0,
+        help="run duration in hours (default 4)",
+    )
+    p_stability.add_argument(
+        "--interval-ms",
+        type=float,
+        default=100.0,
+        help="request start interval in milliseconds (default 100)",
+    )
+    p_stability.add_argument(
+        "--sample-seconds",
+        type=float,
+        default=60.0,
+        help="progress sample interval in seconds (default 60)",
+    )
+    p_stability.add_argument(
+        "--load",
+        type=float,
+        default=0.9,
+        help="host generator target load; use 0 with a board stress image",
+    )
+    p_stability.add_argument("--did", type=lambda s: int(s, 0), default=0xF190)
+    p_stability.add_argument("--report", help="optional markdown report output path")
 
     p_fault = sub.add_parser("fault", help="inject faults into a virtual or real ECU")
     p_fault.add_argument("--node", default="ecu1")
@@ -553,6 +589,46 @@ def cmd_stress(args: argparse.Namespace) -> int:
         cleanup()
 
 
+def cmd_stability(args: argparse.Namespace) -> int:
+    config = _network(args)
+    clients, load_bus, cleanup = _open_clients(args)
+
+    def print_progress(sample: StabilitySample) -> None:
+        totals = [
+            f"{name} {node.ok}/{node.sent}"
+            for name, node in sorted(sample.nodes.items())
+        ]
+        print(
+            f"[stability {sample.elapsed_s / 3600:.3f} h] "
+            f"load {sample.generator_load * 100:.1f}% "
+            + " ".join(totals),
+            flush=True,
+        )
+
+    try:
+        result = run_stability(
+            load_bus,
+            clients,
+            duration_s=args.hours * 3600.0,
+            request_interval_ms=args.interval_ms,
+            sample_interval_s=args.sample_seconds,
+            did=args.did,
+            target_load=args.load,
+            baudrate=config.baudrate,
+            progress=print_progress,
+        )
+        report = render_stability_report(result)
+        print(report)
+        if args.report:
+            output = Path(args.report)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(report, encoding="utf-8")
+            print(f"report written to {output}")
+        return 0 if result.passed else 1
+    finally:
+        cleanup()
+
+
 def cmd_fault(args: argparse.Namespace) -> int:
     client, cleanup = _open_client(args, args.node)
     injector = FaultInjector({args.node: client})
@@ -777,6 +853,7 @@ def main(argv: list[str] | None = None) -> int:
         "structs": cmd_structs,
         "demo": cmd_demo,
         "stress": cmd_stress,
+        "stability": cmd_stability,
         "fault": cmd_fault,
         "bus-off-test": cmd_bus_off_test,
         "uds-smoke": cmd_uds_smoke,

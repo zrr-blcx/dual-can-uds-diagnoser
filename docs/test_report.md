@@ -7,10 +7,10 @@
 
 | Item | Value |
 | --- | --- |
-| Date | 2026-10-26 |
+| Date | 2026-10-27 |
 | Tester | Local bench run |
-| Firmware version | Week 7/8 formal build plus isolated DBC and stress test modes |
-| Diagnostic tool version | 0.6.0 development tree |
+| Firmware version | v1.0.0 formal build plus isolated stability/frame-loss modes |
+| Diagnostic tool version | 1.0.0 |
 | CAN bitrate | 500 kbps |
 | Transceivers | SN65HVD230 x2 |
 | USB-CAN | CANable slcan |
@@ -47,10 +47,52 @@ UDS timeout rates are 48.3% for F407 and 47.6% for F103.
 
 ## 10,000 Frame Final Test
 
-| Node | Frames | Loss rate target | Result |
-| --- | ---: | ---: | --- |
-| ecu1 | 5000 | < 0.1% | Target |
-| ecu2 | 5000 | < 0.1% | Target |
+| Direction | Sent | Received | Physical loss | Target | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| F407 -> F103 | 5000 | 4998 | 0.0400% | < 0.1% | PASS |
+| F103 -> F407 | 5000 | 5000 | 0.0000% | < 0.1% | PASS |
+
+The 50% aggregate-load run used an 888 us frame period and independent sequence
+IDs `0x6F0` / `0x6F1`. Both nodes completed 5000 successful transmissions.
+UDS traffic was measured separately: F407 368/396 responses with 28 timeouts
+(7.07%); F103 373/376 with 3 timeouts (0.80%).
+
+The 90% supplemental run sent 1000 frames per node, 2000 total. F103 received
+1000/1000 F407 frames (0%); F407 received 999/1000 F103 frames (0.1%). UDS
+timeouts were 27/395 (6.84%) on F407 and 5/375 (1.33%) on F103. The normal-load
+0.1% physical gate is not applied to this high-load record.
+
+## Week 9 Four-Hour Stability
+
+Final reproducible image hashes:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| F407 HEX | `85B8217654D1C022EA2AB020A0713E95AA2C9105EF5842FF70ECE1A6B25DD29E` |
+| F103 HEX | `3AF3A9B33C05C9BD03A7F4A8C51D20D2AA96E99C3085BCCDA0711923650B39C8` |
+
+| Metric | F407 | F103 |
+| --- | ---: | ---: |
+| Continuous uptime | 4.046 h | 4.046 h |
+| UDS requests | 145673 | 145650 |
+| UDS success | 145596 | 145650 |
+| UDS timeouts | 77 (0.053%) | 0 |
+| Invalid responses | 0 | 0 |
+| Average RTT | 1.32 ms | 2.00 ms |
+| Maximum RTT | 3 ms | 2 ms |
+| Final CAN state | error-active | error-active |
+| IWDG/SFTRST after flash baseline | unchanged | unchanged |
+
+F407 generated 57,971,063 accepted `0x7F0` frames during the run and reached
+about 90% bus load. F103 counted 57,925,485 of them, a 0.0786% observed loss
+relative to accepted transmissions. Intentional missed scheduling slots are
+reported separately from actual transmitted-frame loss.
+
+Three independent 1-second CH2 CANH-CANL injections were then performed under
+the fast-frame test image. F407 recorded three Bus-Off events and three
+successful recoveries, returned to `error-active/TEC=0`, and did not reset.
+F103 also returned to error-active. The formal images were restored and both
+nodes passed 20/20 read-only smoke requests.
 
 ## NRC Coverage Matrix
 
@@ -82,7 +124,8 @@ UDS timeout rates are 48.3% for F407 and 47.6% for F103.
 
 The three hardware recovery events occurred during one approximately 2-second
 fault injection. This satisfies the automatic 3/3 recovery criterion, but it is
-not the same as three independent manual injection rounds.
+not the same as three independent manual injection rounds. The independent
+Week 9 three-round result is recorded above.
 
 ## Virtual Bus-Off Validation
 
@@ -115,6 +158,11 @@ STM32 validation was completed later in the Week 2 hardware section below.
 | 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `112 passed` |
 | 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `114 passed` |
 | 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `125 passed` |
+| 2026-10-26 | 3.14.7 | `py -3.14 -m pytest -p no:cacheprovider tests\test_stability.py tests\test_cli.py` | `18 passed` |
+| 2026-10-26 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `130 passed` |
+| 2026-10-27 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `132 passed` |
+| 2026-10-27 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `132 passed in 110.63s`, final release run |
+| 2026-10-27 | 3.12.13 (`.venv`) | `.venv\Scripts\python.exe -m pytest -p no:cacheprovider` | `132 passed in 109.00s`, final code freeze |
 | 2026-10-24 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40086628980` |
 | 2026-10-25 | 3.10 / 3.11 / 3.12 | GitHub Actions `pytest` | 3/3 matrix jobs PASS, run `40167418774` |
 
@@ -399,6 +447,26 @@ Real hardware fault-hook checks on both nodes:
 
 The 90% scenario intentionally exposes degradation. Its DUT timeout and gap
 rates are not compared with the normal-load `<0.1%` physical frame loss gate.
+
+## Week 9 Stability Runner Validation
+
+Measured on 2026-10-26 with the duration-based runner on a virtual dual-node
+bus. This validates timing, sampling, graceful interruption, timeout accounting,
+and CLI routing. The final hardware stability result is recorded above.
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Full-duration short run | Complete requested runtime | PASS |
+| Per-node request counters | Both nodes issue and complete requests | PASS |
+| Periodic samples | At least three snapshots over the run | PASS |
+| Operator interruption | Keep partial samples, do not mark PASS | PASS |
+| UDS timeout accounting | Timeout count separate from errors | PASS |
+| CLI route and report | Render Stability Report and return success | PASS |
+| Targeted Python 3.14 regression | Stability and CLI tests | PASS, 18 tests |
+| Full Python 3.12 regression | Complete suite | PASS, 130 tests |
+
+The four-hour F407/F103 run, independent background-load measurement, CAN
+health snapshots, and `RCC_CSR` evidence completed on 2026-10-27.
 
 ## Week 2 Bus-Off Hardware Validation
 

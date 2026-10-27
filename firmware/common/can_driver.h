@@ -49,6 +49,7 @@ typedef struct
   uint32_t time_seg1;
   uint32_t time_seg2;
   uint32_t filter_bank;
+  CanRxQueue_t priority_rx_queue;
   CanRxQueue_t rx_queue;
 } CanDriver_t;
 
@@ -66,6 +67,9 @@ HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
                                     uint32_t std_id,
                                     const uint8_t *data,
                                     uint8_t len);
+
+/* Number of currently free transmit mailboxes (0..3). */
+uint32_t CanDriver_GetTxMailboxesFreeLevel(const CanDriver_t *driver);
 
 /* True while any CAN transmit mailbox is still waiting for bus completion. */
 bool CanDriver_IsTxPending(const CanDriver_t *driver);

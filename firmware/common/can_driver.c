@@ -11,6 +11,8 @@ _Static_assert(HAL_CAN_ERROR_CRC == CAN_HEALTH_ERROR_FLAG_CRC, "HAL crc error bi
 #define CAN_DRIVER_ERROR_INTERRUPTS                                          \
   (CAN_IT_ERROR | CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE |             \
    CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE)
+#define CAN_DRIVER_BACKGROUND_ID 0x7F0U
+#define CAN_DRIVER_FRAME_LOSS_ID 0x6F0U
 
 volatile CanDriverErrorLog_t g_can_error_log;
 
@@ -28,20 +30,57 @@ static void CanDriver_LogErrorIsr(uint32_t error_code, uint32_t esr)
 
 static HAL_StatusTypeDef CanDriver_ConfigureFilter(CanDriver_t *driver, uint32_t filter_bank)
 {
-  CAN_FilterTypeDef filter = {0};
+  CAN_FilterTypeDef background = {0};
+  CAN_FilterTypeDef frame_loss = {0};
+  CAN_FilterTypeDef control = {0};
 
-  filter.FilterActivation = ENABLE;
-  filter.FilterBank = filter_bank;
-  filter.FilterMode = CAN_FILTERMODE_IDMASK;
-  filter.FilterScale = CAN_FILTERSCALE_32BIT;
-  filter.FilterFIFOAssignment = CAN_RX_FIFO0;
-  filter.FilterIdHigh = 0x0000U;
-  filter.FilterIdLow = 0x0000U;
-  filter.FilterMaskIdHigh = 0x0000U;
-  filter.FilterMaskIdLow = 0x0000U;
-  filter.SlaveStartFilterBank = 14U;
+  /* Hardware FIFO priority: route the exact load-generator ID to FIFO1 and
+     every other standard frame to FIFO0. The lower filter bank matches first,
+     so a background frame is not also delivered to the control FIFO. */
+  background.FilterActivation = ENABLE;
+  background.FilterBank = filter_bank;
+  background.FilterMode = CAN_FILTERMODE_IDMASK;
+  background.FilterScale = CAN_FILTERSCALE_32BIT;
+  background.FilterFIFOAssignment = CAN_RX_FIFO1;
+  background.FilterIdHigh = (uint32_t)(CAN_DRIVER_BACKGROUND_ID << 5U);
+  background.FilterIdLow = 0x0000U;
+  background.FilterMaskIdHigh = (uint32_t)(0x7FFU << 5U);
+  background.FilterMaskIdLow = 0x0000U;
+  background.SlaveStartFilterBank = 14U;
 
-  return HAL_CAN_ConfigFilter(driver->handle, &filter);
+  if (HAL_CAN_ConfigFilter(driver->handle, &background) != HAL_OK)
+  {
+    return HAL_ERROR;
+  }
+
+  frame_loss.FilterActivation = ENABLE;
+  frame_loss.FilterBank = filter_bank + 1U;
+  frame_loss.FilterMode = CAN_FILTERMODE_IDMASK;
+  frame_loss.FilterScale = CAN_FILTERSCALE_32BIT;
+  frame_loss.FilterFIFOAssignment = CAN_RX_FIFO1;
+  frame_loss.FilterIdHigh = (uint32_t)(CAN_DRIVER_FRAME_LOSS_ID << 5U);
+  frame_loss.FilterIdLow = 0x0000U;
+  frame_loss.FilterMaskIdHigh = (uint32_t)(0x7FEU << 5U);
+  frame_loss.FilterMaskIdLow = 0x0000U;
+  frame_loss.SlaveStartFilterBank = 14U;
+
+  if (HAL_CAN_ConfigFilter(driver->handle, &frame_loss) != HAL_OK)
+  {
+    return HAL_ERROR;
+  }
+
+  control.FilterActivation = ENABLE;
+  control.FilterBank = filter_bank + 2U;
+  control.FilterMode = CAN_FILTERMODE_IDMASK;
+  control.FilterScale = CAN_FILTERSCALE_32BIT;
+  control.FilterFIFOAssignment = CAN_RX_FIFO0;
+  control.FilterIdHigh = 0x0000U;
+  control.FilterIdLow = 0x0000U;
+  control.FilterMaskIdHigh = 0x0000U;
+  control.FilterMaskIdLow = 0x0000U;
+  control.SlaveStartFilterBank = 14U;
+
+  return HAL_CAN_ConfigFilter(driver->handle, &control);
 }
 
 HAL_StatusTypeDef CanDriver_Init(CanDriver_t *driver,
@@ -63,6 +102,7 @@ HAL_StatusTypeDef CanDriver_Init(CanDriver_t *driver,
   driver->time_seg1 = time_seg1;
   driver->time_seg2 = time_seg2;
   driver->filter_bank = filter_bank;
+  CanRxQueue_Init(&driver->priority_rx_queue);
   CanRxQueue_Init(&driver->rx_queue);
 
   handle->Init.Prescaler = prescaler;
@@ -106,7 +146,10 @@ HAL_StatusTypeDef CanDriver_Start(CanDriver_t *driver)
   }
 
   return HAL_CAN_ActivateNotification(
-      driver->handle, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_DRIVER_ERROR_INTERRUPTS);
+      driver->handle,
+      CAN_IT_RX_FIFO0_MSG_PENDING |
+          CAN_IT_RX_FIFO1_MSG_PENDING |
+          CAN_DRIVER_ERROR_INTERRUPTS);
 }
 
 HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
@@ -142,6 +185,16 @@ HAL_StatusTypeDef CanDriver_SendStd(CanDriver_t *driver,
   return HAL_CAN_AddTxMessage(driver->handle, &tx_header, payload, &mailbox);
 }
 
+uint32_t CanDriver_GetTxMailboxesFreeLevel(const CanDriver_t *driver)
+{
+  if ((driver == NULL) || (driver->handle == NULL))
+  {
+    return 0U;
+  }
+
+  return HAL_CAN_GetTxMailboxesFreeLevel(driver->handle);
+}
+
 bool CanDriver_IsTxPending(const CanDriver_t *driver)
 {
   if ((driver == NULL) || (driver->handle == NULL))
@@ -173,7 +226,24 @@ void CanDriver_RxIrqHandler(CanDriver_t *driver)
     }
 
     id = (rx_header.IDE == CAN_ID_EXT) ? rx_header.ExtId : rx_header.StdId;
-    (void)CanRxQueue_Push(&driver->rx_queue, id, data, (uint8_t)rx_header.DLC);
+    (void)CanRxQueue_Push(&driver->priority_rx_queue,
+                          id,
+                          data,
+                          (uint8_t)rx_header.DLC);
+  }
+
+  while (HAL_CAN_GetRxFifoFillLevel(driver->handle, CAN_RX_FIFO1) > 0U)
+  {
+    if (HAL_CAN_GetRxMessage(driver->handle, CAN_RX_FIFO1, &rx_header, data) != HAL_OK)
+    {
+      return;
+    }
+
+    id = (rx_header.IDE == CAN_ID_EXT) ? rx_header.ExtId : rx_header.StdId;
+    (void)CanRxQueue_Push(&driver->rx_queue,
+                          id,
+                          data,
+                          (uint8_t)rx_header.DLC);
   }
 }
 
@@ -184,6 +254,11 @@ void CanDriver_ProcessRx(CanDriver_t *driver)
   if ((driver == NULL) || (driver->rx_callback == NULL))
   {
     return;
+  }
+
+  while (CanRxQueue_Pop(&driver->priority_rx_queue, &frame))
+  {
+    driver->rx_callback(frame.id, frame.data, frame.length);
   }
 
   while (CanRxQueue_Pop(&driver->rx_queue, &frame))

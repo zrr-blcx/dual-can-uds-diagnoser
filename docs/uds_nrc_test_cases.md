@@ -1,8 +1,8 @@
 # 第 5 周 NRC 测试用例表
 
 本表是第五周交付物之一。`Host PASS` 表示 C 主机测试和 Python 虚拟 ECU
-测试均已覆盖；`HW Target` 表示真实 F407/F103 + CANable 验收仍需在 ISO-TP
-层完成后执行。
+测试均已覆盖；`HW PASS` 表示已通过真实 F407/F103 + CANable 验收。
+`HW Target` 仅保留一个超出十周最终验收矩阵的可选扩展场景。
 
 ## 必测 NRC
 
