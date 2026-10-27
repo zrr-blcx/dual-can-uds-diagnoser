@@ -80,7 +80,9 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get \
             -o Acquire::Retries=3 \
             -o Acquire::http::Timeout=30 \
-            install -y --no-install-recommends gcc-arm-none-eabi
+            install -y --no-install-recommends \
+              gcc-arm-none-eabi \
+              libnewlib-arm-none-eabi
       - name: Build F407
         env:
           ARM_GCC_BIN: /usr/bin
