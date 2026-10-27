@@ -68,13 +68,19 @@ jobs:
   firmware:
     name: firmware-build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Install ARM GCC
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi
+          sudo apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30 \
+            update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30 \
+            install -y --no-install-recommends gcc-arm-none-eabi
       - name: Build F407
         env:
           ARM_GCC_BIN: /usr/bin
